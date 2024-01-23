@@ -3,6 +3,7 @@ package actress
 import (
 	"context"
 	"fmt"
+	"sync"
 )
 
 // processes holds information about what process functions
@@ -20,6 +21,28 @@ func newProcesses() *processes {
 		pFuncMap: make(map[EventType]pFunc),
 	}
 	return &p
+}
+
+type pid struct {
+	mu   sync.Mutex
+	next int
+}
+
+func newPid() *pid {
+	p := pid{
+		next: 0,
+	}
+
+	return &p
+}
+
+func (p *pid) GetNext() int {
+	p.mu.Lock()
+	nr := p.next
+	p.next++
+	p.mu.Unlock()
+
+	return nr
 }
 
 // Process the essential parts of an process.
@@ -40,6 +63,10 @@ type Process struct {
 	isRoot bool
 	// Holding all configuration settings.
 	Config *Config
+	// process ID struct
+	pid *pid
+	// PID of the process
+	PID int
 }
 
 // Checks if the event is defined in the map, and returns true if it is.
@@ -63,10 +90,11 @@ func NewActress(ctx context.Context) *Process {
 		Processes: newProcesses(),
 		isRoot:    true,
 		Config:    conf,
+		pid:       newPid(),
 	}
 
-	//a.Processes.inChMap[Event] = a.InCh
 	a.fn = procProcessesStartFunc(ctx, &a)
+	a.PID = a.pid.next
 
 	// Register all the standard child processes that should
 	// spawn off the root process
@@ -102,6 +130,8 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn pFunc)
 		Event:     event,
 		Processes: parentP.Processes,
 		isRoot:    false,
+		pid:       parentP.pid,
+		PID:       parentP.pid.GetNext(),
 	}
 
 	p.Processes.inChMap[event] = p.InCh
