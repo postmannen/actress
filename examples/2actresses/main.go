@@ -1,0 +1,86 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"strings"
+	"time"
+
+	"github.com/postmannen/actress"
+)
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create a new root process.
+	rootAct := actress.NewActress(ctx)
+
+	// Create a test channel where we receive the end result.
+	testCh := make(chan string)
+
+	const ETTest1 actress.EventType = "ETTest1"
+	const ETTest2 actress.EventType = "ETTest2"
+
+	// Define the function that will be attached to the ETTest1 EventType.
+	test1Func := func(ctx context.Context, p *actress.Process) func() {
+		fn := func() {
+			for {
+				select {
+				case result := <-p.InCh:
+					upper := strings.ToUpper(string(result.Data))
+					p.EventCh <- actress.Event{EventType: ETTest2, Data: []byte(upper)}
+
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	// Register the event type and attach a function to it.
+	rootAct.RegisterProcess(ETTest1, test1Func)
+
+	// Define the function that will be attached to the ETTest2 EventType.
+	test2Func := func(ctx context.Context, p *actress.Process) func() {
+		fn := func() {
+			for {
+				select {
+				case result := <-p.InCh:
+					dots := string(result.Data) + "..."
+					testCh <- string(dots)
+
+					// Also create an informational error message.
+					p.ErrorCh <- actress.Event{EventType: actress.ERDebug, Err: fmt.Errorf("info: done with the acting")}
+
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	// Register the event type and attach a function to it.
+	rootAct.RegisterProcess(ETTest2, test2Func)
+
+	// Start all the registered actors.
+	err := rootAct.Act()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Add and pass in an event that will be picked up by the actor
+	// registered for the ETTest1 EventType, and add "test" to the
+	// data field of the event.
+	rootAct.AddEvent(actress.Event{EventType: ETTest1, Data: []byte("test")})
+	// Receive and print the result.
+	fmt.Printf("The result: %v\n", <-testCh)
+
+	cancel()
+	time.Sleep(time.Second * 2)
+}
