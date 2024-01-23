@@ -99,18 +99,18 @@ func NewActress(ctx context.Context) *Process {
 	// Register all the standard child processes that should
 	// spawn off the root process
 	if a.Config.Profiling {
-		a.RegisterProcess(ETProfiling, procProfilingFunc)
+		a.RegisterEventToRoot(ETProfiling, procProfilingFunc)
 	}
-	a.RegisterProcess(ETRouter, procRouterFunc)
-	a.RegisterProcess(ETOsSignal, procOsSignalFunc)
-	a.RegisterProcess(ETDone, procDoneFunc)
-	a.RegisterProcess(ETPrint, procPrintFunc)
-	a.RegisterProcess(ETExit, procExitFunc)
+	a.RegisterEventToRoot(ETRouter, procRouterFunc)
+	a.RegisterEventToRoot(ETOsSignal, procOsSignalFunc)
+	a.RegisterEventToRoot(ETDone, procDoneFunc)
+	a.RegisterEventToRoot(ETPrint, procPrintFunc)
+	a.RegisterEventToRoot(ETExit, procExitFunc)
 
-	a.RegisterProcess(ERRouter, procErrorRouterFunc)
-	a.RegisterProcess(ERLog, procErrorLogFunc)
-	a.RegisterProcess(ERDebug, procDebugLogFunc)
-	a.RegisterProcess(ERFatal, procFatalLogFunc)
+	a.RegisterEventToRoot(ERRouter, procErrorRouterFunc)
+	a.RegisterEventToRoot(ERLog, procErrorLogFunc)
+	a.RegisterEventToRoot(ERDebug, procDebugLogFunc)
+	a.RegisterEventToRoot(ERFatal, procFatalLogFunc)
 
 	return &a
 }
@@ -143,7 +143,7 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn pFunc)
 }
 
 // Register a new event type and it's process function.
-func (p *Process) RegisterProcess(et EventType, ep func(context.Context, *Process) func()) {
+func (p *Process) RegisterEventToRoot(et EventType, ep func(context.Context, *Process) func()) {
 	p.Processes.pFuncMap[et] = ep
 }
 

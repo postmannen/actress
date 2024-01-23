@@ -80,8 +80,8 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	rootAct.RegisterProcess(ETWriteToFile, WriteToFileFunc)
-	rootAct.RegisterProcess(ETHttpGet, httpGetFunc)
+	rootAct.RegisterEventToRoot(ETWriteToFile, WriteToFileFunc)
+	rootAct.RegisterEventToRoot(ETHttpGet, httpGetFunc)
 
 	// Start all the registered actors.
 	err := rootAct.Act()

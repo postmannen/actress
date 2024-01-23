@@ -29,7 +29,7 @@ func TestEventProcs(t *testing.T) {
 	}
 
 	rootp := NewActress(ctx)
-	rootp.RegisterProcess(ETTest, tFunc)
+	rootp.RegisterEventToRoot(ETTest, tFunc)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func TestEventSliceProcs(t *testing.T) {
 		return fn
 	}
 
-	rootp.RegisterProcess(ETTest, testFunc)
+	rootp.RegisterEventToRoot(ETTest, testFunc)
 
 	const ETNextEvent EventType = "ETNextEvent"
 
@@ -87,7 +87,7 @@ func TestEventSliceProcs(t *testing.T) {
 		return fn
 	}
 
-	rootp.RegisterProcess(ETNextEvent, nextEventFunc)
+	rootp.RegisterEventToRoot(ETNextEvent, nextEventFunc)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func BenchmarkSingleProcess(b *testing.B) {
 	}
 
 	rootp := NewActress(ctx)
-	rootp.RegisterProcess(ETTest, tFunc)
+	rootp.RegisterEventToRoot(ETTest, tFunc)
 	err := rootp.Act()
 	if err != nil {
 		b.Fatal(err)
@@ -167,7 +167,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 		return fn
 	}
 
-	rootp.RegisterProcess(ETTest1, tFunc1)
+	rootp.RegisterEventToRoot(ETTest1, tFunc1)
 
 	tFunc2 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
@@ -185,7 +185,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 		return fn
 	}
 
-	rootp.RegisterProcess(ETTest2, tFunc2)
+	rootp.RegisterEventToRoot(ETTest2, tFunc2)
 
 	err := rootp.Act()
 	if err != nil {
@@ -227,7 +227,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 		return fn
 	}
 
-	rootp.RegisterProcess(ETTest1, tFunc1)
+	rootp.RegisterEventToRoot(ETTest1, tFunc1)
 
 	tFunc2 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
@@ -244,7 +244,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 		return fn
 	}
 
-	rootp.RegisterProcess(ETTest2, tFunc2)
+	rootp.RegisterEventToRoot(ETTest2, tFunc2)
 
 	tFunc3 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
@@ -262,7 +262,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 		return fn
 	}
 
-	rootp.RegisterProcess(ETTest3, tFunc3)
+	rootp.RegisterEventToRoot(ETTest3, tFunc3)
 
 	err := rootp.Act()
 	if err != nil {

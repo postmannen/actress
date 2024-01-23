@@ -29,6 +29,30 @@ func main() {
 			for {
 				select {
 				case result := <-p.InCh:
+
+					// Define the function that will be attached to the ETTest2 EventType.
+					test2Func := func(ctx context.Context, p *actress.Process) func() {
+						fn := func() {
+							for {
+								select {
+								case result := <-p.InCh:
+									dots := string(result.Data) + "..."
+									testCh <- string(dots)
+
+									// Also create an informational error message.
+									p.ErrorCh <- actress.Event{EventType: actress.ERDebug, Err: fmt.Errorf("info: done with the acting")}
+
+								case <-ctx.Done():
+									return
+								}
+							}
+						}
+
+						return fn
+					}
+					p2 := actress.NewProcess(ctx, *p, ETTest2, test2Func)
+					p2.Act()
+
 					upper := strings.ToUpper(string(result.Data))
 					p.EventCh <- actress.Event{EventType: ETTest2, Data: []byte(upper)}
 
@@ -43,30 +67,6 @@ func main() {
 
 	// Register the event type and attach a function to it.
 	rootAct.RegisterEventToRoot(ETTest1, test1Func)
-
-	// Define the function that will be attached to the ETTest2 EventType.
-	test2Func := func(ctx context.Context, p *actress.Process) func() {
-		fn := func() {
-			for {
-				select {
-				case result := <-p.InCh:
-					dots := string(result.Data) + "..."
-					testCh <- string(dots)
-
-					// Also create an informational error message.
-					p.ErrorCh <- actress.Event{EventType: actress.ERDebug, Err: fmt.Errorf("info: done with the acting")}
-
-				case <-ctx.Done():
-					return
-				}
-			}
-		}
-
-		return fn
-	}
-
-	// Register the event type and attach a function to it.
-	rootAct.RegisterEventToRoot(ETTest2, test2Func)
 
 	// Start all the registered actors.
 	err := rootAct.Act()
