@@ -134,6 +134,9 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn pFunc)
 		PID:       parentP.pid.GetNext(),
 	}
 
+	// Register the InCh of the process in the inchMap so the root
+	// process router func are able to route the Events to the
+	// correct process
 	p.Processes.inChMap[event] = p.InCh
 
 	if fn != nil {
