@@ -15,7 +15,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewActress(ctx)
+	rootAct := actress.NewRootProcess(ctx)
 
 	// Create a test channel where we receive the end result.
 	testCh := make(chan string)
@@ -42,7 +42,7 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	rootAct.RegisterEventToRoot(ETTest1, test1Func)
+	actress.NewProcess(ctx, *rootAct, ETTest1, test1Func).Act()
 
 	// Define the function that will be attached to the ETTest2 EventType.
 	test2Func := func(ctx context.Context, p *actress.Process) func() {
@@ -66,7 +66,7 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	rootAct.RegisterEventToRoot(ETTest2, test2Func)
+	actress.NewProcess(ctx, *rootAct, ETTest2, test2Func).Act()
 
 	// Start all the registered actors.
 	err := rootAct.Act()
@@ -81,6 +81,6 @@ func main() {
 	// Receive and print the result.
 	fmt.Printf("The result: %v\n", <-testCh)
 
-	cancel()
 	time.Sleep(time.Second * 2)
+	cancel()
 }

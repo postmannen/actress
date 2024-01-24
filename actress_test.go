@@ -28,12 +28,13 @@ func TestEventProcs(t *testing.T) {
 		return fn
 	}
 
-	rootp := NewActress(ctx)
-	rootp.RegisterEventToRoot(ETTest, tFunc)
+	rootp := NewRootProcess(ctx)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	NewProcess(ctx, *rootp, ETTest, tFunc).Act()
 
 	rootp.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
 	if r := <-testCh; r != "test" {
@@ -45,7 +46,7 @@ func TestEventSliceProcs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rootp := NewActress(ctx)
+	rootp := NewRootProcess(ctx)
 
 	testCh := make(chan string)
 	const ETTest EventType = "ETTest"
@@ -65,7 +66,7 @@ func TestEventSliceProcs(t *testing.T) {
 		return fn
 	}
 
-	rootp.RegisterEventToRoot(ETTest, testFunc)
+	NewProcess(ctx, *rootp, ETTest, testFunc).Act()
 
 	const ETNextEvent EventType = "ETNextEvent"
 
@@ -87,7 +88,7 @@ func TestEventSliceProcs(t *testing.T) {
 		return fn
 	}
 
-	rootp.RegisterEventToRoot(ETNextEvent, nextEventFunc)
+	NewProcess(ctx, *rootp, ETNextEvent, nextEventFunc).Act()
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
@@ -125,8 +126,8 @@ func BenchmarkSingleProcess(b *testing.B) {
 		return fn
 	}
 
-	rootp := NewActress(ctx)
-	rootp.RegisterEventToRoot(ETTest, tFunc)
+	rootp := NewRootProcess(ctx)
+	NewProcess(ctx, *rootp, ETTest, tFunc).Act()
 	err := rootp.Act()
 	if err != nil {
 		b.Fatal(err)
@@ -144,7 +145,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rootp := NewActress(ctx)
+	rootp := NewRootProcess(ctx)
 
 	testCh := make(chan string)
 
@@ -167,7 +168,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 		return fn
 	}
 
-	rootp.RegisterEventToRoot(ETTest1, tFunc1)
+	NewProcess(ctx, *rootp, ETTest1, tFunc1).Act()
 
 	tFunc2 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
@@ -185,7 +186,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 		return fn
 	}
 
-	rootp.RegisterEventToRoot(ETTest2, tFunc2)
+	NewProcess(ctx, *rootp, ETTest2, tFunc2).Act()
 
 	err := rootp.Act()
 	if err != nil {
@@ -204,7 +205,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rootp := NewActress(ctx)
+	rootp := NewRootProcess(ctx)
 
 	testCh := make(chan string)
 
@@ -227,7 +228,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 		return fn
 	}
 
-	rootp.RegisterEventToRoot(ETTest1, tFunc1)
+	NewProcess(ctx, *rootp, ETTest1, tFunc1).Act()
 
 	tFunc2 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
@@ -244,7 +245,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 		return fn
 	}
 
-	rootp.RegisterEventToRoot(ETTest2, tFunc2)
+	NewProcess(ctx, *rootp, ETTest2, tFunc2).Act()
 
 	tFunc3 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
@@ -262,7 +263,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 		return fn
 	}
 
-	rootp.RegisterEventToRoot(ETTest3, tFunc3)
+	NewProcess(ctx, *rootp, ETTest3, tFunc3).Act()
 
 	err := rootp.Act()
 	if err != nil {

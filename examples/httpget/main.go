@@ -17,16 +17,14 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewActress(ctx)
-
-	// Create a test channel where we receive the end result.
-	testCh := make(chan string)
+	rootAct := actress.NewRootProcess(ctx)
 
 	const ETHttpGet actress.EventType = "ETHttpGet"
 	const ETWriteToFile actress.EventType = "ETWriteToFile"
 
 	httpGetFunc := func(ctx context.Context, p *actress.Process) func() {
 		fn := func() {
+			fmt.Printf(" ************************\n")
 			for {
 				select {
 				case ev := <-p.InCh:
@@ -79,20 +77,19 @@ func main() {
 		return fn
 	}
 
-	// Register the event type and attach a function to it.
-	rootAct.RegisterEventToRoot(ETWriteToFile, WriteToFileFunc)
-	rootAct.RegisterEventToRoot(ETHttpGet, httpGetFunc)
-
 	// Start all the registered actors.
 	err := rootAct.Act()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	rootAct.AddEvent(actress.Event{EventType: ETWriteToFile, Cmd: []string{"http://vg.no"}})
-	// Receive and print the result.
-	fmt.Printf("The result: %v\n", <-testCh)
+	// Register the event type and attach a function to it.
+	actress.NewProcess(ctx, *rootAct, ETWriteToFile, WriteToFileFunc).Act()
+	actress.NewProcess(ctx, *rootAct, ETHttpGet, httpGetFunc).Act()
 
-	cancel()
+	rootAct.AddEvent(actress.Event{EventType: ETHttpGet, Cmd: []string{"http://vg.no"}})
+	// Receive and print the result.
+
 	time.Sleep(time.Second * 2)
+	cancel()
 }

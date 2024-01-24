@@ -2,7 +2,6 @@ package actress
 
 import (
 	"context"
-	"fmt"
 	"sync"
 )
 
@@ -78,7 +77,16 @@ func (p *Process) IsEventDefined(ev EventType) bool {
 	return true
 }
 
-func NewActress(ctx context.Context) *Process {
+// NewRootProcess will prepare and return the root process
+// which holds all the core elements needed, like the main
+// channels for events and errors, and varouis registers or
+// maps holding information about the system. Later created
+// processes will reference these elements when they are
+// created.
+// The root process will also start up all the essential other
+// processes needed, like the event router, and various standard
+// error handling processes.
+func NewRootProcess(ctx context.Context) *Process {
 	conf := NewConfig()
 
 	a := Process{
@@ -93,24 +101,25 @@ func NewActress(ctx context.Context) *Process {
 		pid:       newPid(),
 	}
 
-	a.fn = procProcessesStartFunc(ctx, &a)
 	a.PID = a.pid.next
 
 	// Register all the standard child processes that should
 	// spawn off the root process
 	if a.Config.Profiling {
-		a.RegisterEventToRoot(ETProfiling, procProfilingFunc)
+		NewProcess(ctx, a, ETProfiling, procProfilingFunc).Act()
 	}
-	a.RegisterEventToRoot(ETRouter, procRouterFunc)
-	a.RegisterEventToRoot(ETOsSignal, procOsSignalFunc)
-	a.RegisterEventToRoot(ETDone, procDoneFunc)
-	a.RegisterEventToRoot(ETPrint, procPrintFunc)
-	a.RegisterEventToRoot(ETExit, procExitFunc)
 
-	a.RegisterEventToRoot(ERRouter, procErrorRouterFunc)
-	a.RegisterEventToRoot(ERLog, procErrorLogFunc)
-	a.RegisterEventToRoot(ERDebug, procDebugLogFunc)
-	a.RegisterEventToRoot(ERFatal, procFatalLogFunc)
+	NewProcess(ctx, a, ETRouter, procRouterFunc).Act()
+
+	NewProcess(ctx, a, ETOsSignal, procOsSignalFunc).Act()
+	NewProcess(ctx, a, ETDone, procDoneFunc).Act()
+	NewProcess(ctx, a, ETPrint, procPrintFunc).Act()
+	NewProcess(ctx, a, ETExit, procExitFunc).Act()
+
+	NewProcess(ctx, a, ERRouter, procErrorRouterFunc).Act()
+	NewProcess(ctx, a, ERLog, procErrorLogFunc).Act()
+	NewProcess(ctx, a, ERDebug, procDebugLogFunc).Act()
+	NewProcess(ctx, a, ERFatal, procFatalLogFunc).Act()
 
 	return &a
 }
@@ -145,11 +154,6 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn pFunc)
 	return &p
 }
 
-// Register a new event type and it's process function.
-func (p *Process) RegisterEventToRoot(et EventType, ep func(context.Context, *Process) func()) {
-	p.Processes.pFuncMap[et] = ep
-}
-
 // Will add an event to be handled by the processes.
 func (p *Process) AddEvent(event Event) {
 	p.EventCh <- event
@@ -163,8 +167,10 @@ func (p *Process) AddError(event Event) {
 // Will start the current process.
 func (p *Process) Act() error {
 	if p.fn == nil {
-		return fmt.Errorf("error: process '%v' are missing an process function", p.Event)
+		//go p.fn()
+		return nil
 	}
+
 	go p.fn()
 
 	return nil

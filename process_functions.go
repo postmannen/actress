@@ -23,34 +23,6 @@ type pFunc func(context.Context, *Process) func()
 // Process function used to startup all the other needed processes.
 // This process will only be assigned to the root process in the
 // newProcess function.
-func procProcessesStartFunc(ctx context.Context, pRoot *Process) func() {
-	if !pRoot.isRoot {
-		log.Fatalf("error: the process must be root to run the processes startup function, current process\n")
-	}
-
-	fn := func() {
-		// temporary map just for starting up the standard processes
-		// to avoid having a mutex to protect map in the process.processes
-		// type while we're starting up the processes.
-		tmpPMap := make(map[EventType]*Process)
-
-		for k, v := range pRoot.Processes.pFuncMap {
-			p := NewProcess(ctx, *pRoot, k, v)
-			pRoot.Processes.inChMap[k] = p.InCh
-			tmpPMap[k] = p
-		}
-
-		for _, v := range tmpPMap {
-			err := v.Act()
-			if err != nil {
-				log.Printf("%v\n", err)
-				os.Exit(1)
-			}
-		}
-	}
-
-	return fn
-}
 
 // -----------------------------------------------------------------------------
 // Builtin standard functions
@@ -62,10 +34,7 @@ func procRouterFunc(ctx context.Context, p *Process) func() {
 		for {
 			select {
 			case e := <-p.EventCh:
-
-				//go func() {
 				p.Processes.inChMap[e.EventType] <- e
-				//}()
 
 			case <-ctx.Done():
 				p.AddError(Event{
