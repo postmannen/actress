@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 
 	"github.com/pkg/profile"
 	"github.com/prometheus/client_golang/prometheus"
@@ -28,20 +29,20 @@ type EventType string
 
 // Event types
 const (
-	ETRoot     EventType = "ETRoot"
-	ETRouter   EventType = "ETRouter"
-	ETExit     EventType = "ETExit"
-	ETOsSignal EventType = "ETOsSignal"
-
+	ETRoot      EventType = "ETRoot"
+	ETRouter    EventType = "ETRouter"
+	ETExit      EventType = "ETExit"
+	ETOsSignal  EventType = "ETOsSignal"
 	ETProfiling EventType = "ETprofiling"
-
-	ETPrint EventType = "ETPrint"
-	ETDone  EventType = "ETDone"
+	ETPrint     EventType = "ETPrint"
+	ETDone      EventType = "ETDone"
 
 	ERRouter EventType = "ERRouter"
 	ERLog    EventType = "ERLog"
 	ERDebug  EventType = "ERDebug"
 	ERFatal  EventType = "ERFatal"
+
+	SUPPid EventType = "SUPPid"
 )
 
 type pFunc func(context.Context, *Process) func()
@@ -252,6 +253,54 @@ func procFatalLogFunc(ctx context.Context, p *Process) func() {
 				go func() {
 					log.Fatalf("error for fatal logging received: %v\n", er.Err)
 				}()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	return fn
+}
+
+// -----------------------------------------------------------------------------
+// Supervisor functions
+// -----------------------------------------------------------------------------
+
+type pidAction string
+
+const pidPut pidAction = "pidPut"
+const pidGet pidAction = "pidGet"
+const pidGetAll pidAction = "pidGetAll"
+
+// Handle pids.
+// The structure of the ev.Cmd is a slice of string:
+// []string{"action","pid","process name"}
+func procSupPidFunc(ctx context.Context, p *Process) func() {
+	fn := func() {
+		pids := make(map[int]string)
+
+		for {
+			select {
+			case ev := <-p.InCh:
+				action := pidAction(ev.Cmd[0])
+				pid, err := strconv.Atoi(ev.Cmd[1])
+				if err != nil {
+					log.Fatalf("failed to convert pid from string to int: %v\n", err)
+				}
+				procName := ev.Cmd[2]
+
+				// Check the type of action we got.
+				switch action {
+				case pidPut:
+					pids[pid] = procName
+				case pidGet:
+					p.AddEvent(Event{EventType: ETPrint, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
+				case pidGetAll:
+					for pid, procName := range pids {
+						p.AddEvent(Event{EventType: ETPrint, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
+					}
+				}
+
 			case <-ctx.Done():
 				return
 			}
