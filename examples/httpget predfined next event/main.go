@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -24,7 +23,6 @@ func main() {
 
 	httpGetFunc := func(ctx context.Context, p *actress.Process) func() {
 		fn := func() {
-			fmt.Printf(" ************************\n")
 			for {
 				select {
 				case ev := <-p.InCh:

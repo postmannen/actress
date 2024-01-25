@@ -15,7 +15,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// The strucure of an event.
+// Event defines an event. It holds:
+//   - The EventType, which specifies the process are meant for.
+//   - The Cmd, are meant to but not limited to be a way to give
+//     instructions for what a process should do. The receiving
+//     process are responsible for parsing the string slice into
+//     something useful.
+//   - The Data field are ment to carry the result from the work
+//     done by a process, to the next process.
+//   - Both Cmd and Data can be used interchangeably if it makes
+//     more sense for a given scenario. No strict rules for this
+//     exist. Just make sure to document the use of the given
+//     EventType, so the structure of how to use the fields exist.
+//   - Err, are used by the error event type (ER).
+//   - NextEvent are used when we want to define a chain of events
+//     to be executed. The processes must make use of the field
+//     for this to work. Check out the examples folder for a simple
+//     example for how it could be implemented.
 type Event struct {
 	// EventType eventType `json:"eventType" yaml:"eventType"`
 	EventType EventType `json:"eventType" yaml:"eventType"`

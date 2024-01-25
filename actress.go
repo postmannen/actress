@@ -110,8 +110,9 @@ func NewRootProcess(ctx context.Context) *Process {
 	}
 
 	NewProcess(ctx, a, ETRouter, procRouterFunc).Act()
-
 	NewProcess(ctx, a, ETOsSignal, procOsSignalFunc).Act()
+	NewProcess(ctx, a, SUPPid, procSupPidFunc).Act()
+
 	NewProcess(ctx, a, ETDone, procDoneFunc).Act()
 	NewProcess(ctx, a, ETPrint, procPrintFunc).Act()
 	NewProcess(ctx, a, ETExit, procExitFunc).Act()
