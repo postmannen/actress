@@ -45,20 +45,31 @@ type EventType string
 
 // Event types
 const (
-	ETRoot      EventType = "ETRoot"
-	ETRouter    EventType = "ETRouter"
-	ETExit      EventType = "ETExit"
-	ETOsSignal  EventType = "ETOsSignal"
+	// For the main Root process.
+	ETRoot EventType = "ETRoot"
+	// Router for normal events.
+	ETRouter EventType = "ETRouter"
+	// Exit the system.
+	ETExit EventType = "ETExit"
+	// Press ctrl+c to exit.
+	ETOsSignal EventType = "ETOsSignal"
+	// Profiling.
 	ETProfiling EventType = "ETprofiling"
-	ETPrint     EventType = "ETPrint"
-	ETDone      EventType = "ETDone"
+	// Print the content of the .Data field of the event.
+	ETPrint EventType = "ETPrint"
+	// Done don't currently do anything.
+	ETDone EventType = "ETDone"
+	// Handling pids within the system.
+	ETPid EventType = "ETPid"
 
+	// Router for error events.
 	ERRouter EventType = "ERRouter"
-	ERLog    EventType = "ERLog"
-	ERDebug  EventType = "ERDebug"
-	ERFatal  EventType = "ERFatal"
-
-	SUPPid EventType = "SUPPid"
+	// Log errors.
+	ERLog EventType = "ERLog"
+	// Log debug errors.
+	ERDebug EventType = "ERDebug"
+	// Log and exit system.
+	ERFatal EventType = "ERFatal"
 )
 
 type pFunc func(context.Context, *Process) func()
@@ -291,7 +302,7 @@ const pidGetAll pidAction = "pidGetAll"
 // Handle pids.
 // The structure of the ev.Cmd is a slice of string:
 // []string{"action","pid","process name"}
-func procSupPidFunc(ctx context.Context, p *Process) func() {
+func procPidFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		pids := make(map[int]string)
 
