@@ -22,23 +22,23 @@ func newProcesses() *processes {
 	return &p
 }
 
-type pid struct {
-	mu   sync.Mutex
-	next int
+type pids struct {
+	mu sync.Mutex
+	nr int
 }
 
-func newPid() *pid {
-	p := pid{
-		next: 0,
+func newPids() *pids {
+	p := pids{
+		nr: 0,
 	}
 
 	return &p
 }
 
-func (p *pid) GetNext() int {
+func (p *pids) next() int {
 	p.mu.Lock()
-	nr := p.next
-	p.next++
+	nr := p.nr
+	p.nr++
 	p.mu.Unlock()
 
 	return nr
@@ -63,7 +63,7 @@ type Process struct {
 	// Holding all configuration settings.
 	Config *Config
 	// process ID struct
-	pid *pid
+	pids *pids
 	// PID of the process
 	PID int
 }
@@ -98,10 +98,10 @@ func NewRootProcess(ctx context.Context) *Process {
 		Processes: newProcesses(),
 		isRoot:    true,
 		Config:    conf,
-		pid:       newPid(),
+		pids:      newPids(),
 	}
 
-	a.PID = a.pid.next
+	a.PID = a.pids.nr
 
 	// Register all the standard child processes that should
 	// spawn off the root process
@@ -140,8 +140,8 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn pFunc)
 		Event:     event,
 		Processes: parentP.Processes,
 		isRoot:    false,
-		pid:       parentP.pid,
-		PID:       parentP.pid.GetNext(),
+		pids:      parentP.pids,
+		PID:       parentP.pids.next(),
 	}
 
 	// Register the InCh of the process in the inchMap so the root
