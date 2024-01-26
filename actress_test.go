@@ -2,6 +2,7 @@ package actress
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -103,7 +104,7 @@ func TestEventSliceProcs(t *testing.T) {
 	}
 }
 
-func TestPids(t *testing.T) {
+func TestPidToProcess(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -118,6 +119,44 @@ func TestPids(t *testing.T) {
 	if p := rootp.pids.toProc.getProc(0); p.Event != ETRouter {
 		t.Fatalf("error: process nr 0 was not ETRouter\n")
 	}
+}
+
+func TestPidToProcMap(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rootp := NewRootProcess(ctx)
+	err := rootp.Act()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rootp.AddEvent(Event{EventType: ETPidGetAll, NextEvent: &Event{EventType: ETTestCh}})
+
+	ev := <-rootp.TestCh
+	mapFromEv := make(pidVsProcMap)
+
+	err = json.Unmarshal(ev.Data, &mapFromEv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Compare the map we got with the actual map.
+	mapFromActual := rootp.pids.toProc.copyOfMap()
+
+	// Check that the length of the two maps are equal
+	if len(*mapFromActual) != len(mapFromEv) {
+		t.Fatalf("length of maps are not equal, evMap: %v, actualMap: %v\n", len(*mapFromActual), len(mapFromEv))
+	}
+
+	// Check all elements.
+	for k := range *mapFromActual {
+		if _, ok := mapFromEv[k]; !ok {
+			t.Fatalf("missing map value: %v\n", k)
+		}
+	}
+
+	//t.Fatalf("got event: %v, Data: %v\n", ev.EventType, string(ev.Data))
 }
 
 // -------------------------------------------------------------

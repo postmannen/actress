@@ -2,6 +2,7 @@ package actress
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -61,6 +62,10 @@ const (
 	ETDone EventType = "ETDone"
 	// Handling pids within the system.
 	ETPid EventType = "ETPid"
+	// For getting the result in tests.
+	ETTestCh EventType = "ETTestCh"
+	// Get all the current processes running.
+	ETPidGetAll EventType = "ETPidGetAll"
 
 	// Router for error events.
 	ERRouter EventType = "ERRouter"
@@ -119,6 +124,53 @@ func procOsSignalFunc(ctx context.Context, p *Process) func() {
 		sig := <-sigCh
 		log.Printf("Got terminate signal, terminating all processes, %v\n", sig)
 		os.Exit(0)
+	}
+
+	return fn
+}
+
+func procETTestChFunc(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			select {
+			case e := <-p.InCh:
+				p.TestCh <- e
+
+			case <-ctx.Done():
+				p.AddError(Event{
+					EventType: ERLog,
+					Err:       fmt.Errorf("info: got ctx.Done"),
+				})
+
+				return
+			}
+		}
+	}
+
+	return fn
+}
+
+func procPidGetAllFunc(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			select {
+			case e := <-p.InCh:
+				pMap := p.pids.toProc.copyOfMap()
+				b, err := json.Marshal(pMap)
+				if err != nil {
+					log.Fatalf("error: failed to marshal pid to proc map: %v\n", err)
+				}
+				p.AddEvent(Event{EventType: e.NextEvent.EventType, Data: b})
+
+			case <-ctx.Done():
+				p.AddError(Event{
+					EventType: ERLog,
+					Err:       fmt.Errorf("info: got ctx.Done"),
+				})
+
+				return
+			}
+		}
 	}
 
 	return fn

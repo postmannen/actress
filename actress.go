@@ -99,11 +99,13 @@ type Process struct {
 	// Process function.
 	fn func()
 	// Channel to receive events into the process function.
-	InCh chan Event
+	InCh chan Event `json:"-"`
 	// Channel to send events to be picked up by other processes.
-	EventCh chan Event
+	EventCh chan Event `json:"-"`
 	// Channel to send error events.
-	ErrorCh chan Event
+	ErrorCh chan Event `json:"-"`
+	// Channel for getting the result in tests.
+	TestCh chan Event `json:"-"`
 	// The event type for the process.
 	Event EventType
 	// Maps for various process information.
@@ -144,6 +146,7 @@ func NewRootProcess(ctx context.Context) *Process {
 		InCh:      make(chan Event),
 		EventCh:   make(chan Event),
 		ErrorCh:   make(chan Event),
+		TestCh:    make(chan Event, 1),
 		Event:     ETRoot,
 		Processes: newProcesses(),
 		isRoot:    true,
@@ -161,11 +164,13 @@ func NewRootProcess(ctx context.Context) *Process {
 
 	NewProcess(ctx, p, ETRouter, procRouterFunc).Act()
 	NewProcess(ctx, p, ETOsSignal, procOsSignalFunc).Act()
+	NewProcess(ctx, p, ETTestCh, procETTestChFunc).Act()
 	NewProcess(ctx, p, ETPid, procPidFunc).Act()
 
 	NewProcess(ctx, p, ETDone, procDoneFunc).Act()
 	NewProcess(ctx, p, ETPrint, procPrintFunc).Act()
 	NewProcess(ctx, p, ETExit, procExitFunc).Act()
+	NewProcess(ctx, p, ETPidGetAll, procPidGetAllFunc).Act()
 
 	NewProcess(ctx, p, ERRouter, procErrorRouterFunc).Act()
 	NewProcess(ctx, p, ERLog, procErrorLogFunc).Act()
@@ -183,6 +188,7 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn pFunc)
 		InCh:      make(chan Event),
 		EventCh:   parentP.EventCh,
 		ErrorCh:   parentP.ErrorCh,
+		TestCh:    parentP.TestCh,
 		Event:     event,
 		Processes: parentP.Processes,
 		isRoot:    false,
