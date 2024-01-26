@@ -45,41 +45,8 @@ type Event struct {
 type EventType string
 
 // Event types
-const (
-	// For the main Root process.
-	ETRoot EventType = "ETRoot"
-	// Router for normal events.
-	ETRouter EventType = "ETRouter"
-	// Will exit and kill all processes.
-	ETExit EventType = "ETExit"
-	// Press ctrl+c to exit.
-	ETOsSignal EventType = "ETOsSignal"
-	// Profiling.
-	ETProfiling EventType = "ETprofiling"
-	// Print the content of the .Data field of the event to
-	// stdout.
-	ETPrint EventType = "ETPrint"
-	// Done don't currently do anything.
-	ETDone EventType = "ETDone"
-	// Handling pids within the system.
-	// The structure of the ev.Cmd is a slice of string:
-	// []string{"action","pid","process name"}
-	ETPid EventType = "ETPid"
-	// Will forward the incomming event to the Process.TestCh.
-	ETTestCh EventType = "ETTestCh"
-	// Get all the current processes running. Will return a
-	// json encoded PidVsProcMap.
-	ETPidGetAll EventType = "ETPidGetAll"
-
-	// Router for error events.
-	ERRouter EventType = "ERRouter"
-	// Log errors.
-	ERLog EventType = "ERLog"
-	// Log debug errors.
-	ERDebug EventType = "ERDebug"
-	// Log and exit system.
-	ERFatal EventType = "ERFatal"
-)
+// For the main Root process.
+const ETRoot EventType = "ETRoot"
 
 type pFunc func(context.Context, *Process) func()
 
@@ -94,6 +61,9 @@ type pFunc func(context.Context, *Process) func()
 // -----------------------------------------------------------------------------
 // Builtin standard functions
 // -----------------------------------------------------------------------------
+
+// Router for normal events.
+const ETRouter EventType = "ETRouter"
 
 // Process function for routing and handling events. Will check
 // and route the event to the correct process.
@@ -118,6 +88,9 @@ func etRouterFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// Press ctrl+c to exit.
+const ETOsSignal EventType = "ETOsSignal"
+
 // Process function for handling CTRL+C pressed.
 func etOsSignalFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
@@ -133,6 +106,9 @@ func etOsSignalFunc(ctx context.Context, p *Process) func() {
 
 	return fn
 }
+
+// Will forward the incomming event to the Process.TestCh.
+const ETTestCh EventType = "ETTestCh"
 
 // Will forward the event to the Process.TestCh.
 func etTestChFunc(ctx context.Context, p *Process) func() {
@@ -155,6 +131,10 @@ func etTestChFunc(ctx context.Context, p *Process) func() {
 
 	return fn
 }
+
+// Get all the current processes running. Will return a
+// json encoded PidVsProcMap.
+const ETPidGetAll EventType = "ETPidGetAll"
 
 // Get all the pids and processes, encode it into json.
 func etPidGetAllFunc(ctx context.Context, p *Process) func() {
@@ -183,6 +163,9 @@ func etPidGetAllFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// Profiling.
+const ETProfiling EventType = "ETprofiling"
+
 func etProfilingFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		//defer profile.Start(profile.BlockProfile).Stop()
@@ -208,6 +191,9 @@ func etProfilingFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// Done don't currently do anything.
+const ETDone EventType = "ETDone"
+
 // TODO: Check if there is still a good need for this.
 func etDoneFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
@@ -228,6 +214,9 @@ func etDoneFunc(ctx context.Context, p *Process) func() {
 }
 
 // Print the content of the .Data field of the event to stdout.
+const ETPrint EventType = "ETPrint"
+
+// Print the content of the .Data field of the event to stdout.
 func etPrintFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
@@ -245,6 +234,9 @@ func etPrintFunc(ctx context.Context, p *Process) func() {
 
 	return fn
 }
+
+// Will exit and kill all processes.
+const ETExit EventType = "ETExit"
 
 // Will exit and kill all processes.
 func etExitFunc(ctx context.Context, p *Process) func() {
@@ -269,6 +261,9 @@ func etExitFunc(ctx context.Context, p *Process) func() {
 // -----------------------------------------------------------------------------
 // Error handling functions
 // -----------------------------------------------------------------------------
+
+// Router for error events.
+const ERRouter EventType = "ERRouter"
 
 // Process function for routing and handling events.
 func erRouterFunc(ctx context.Context, p *Process) func() {
@@ -296,6 +291,9 @@ func erRouterFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// Log errors.
+const ERLog EventType = "ERLog"
+
 func erLogFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
@@ -314,6 +312,9 @@ func erLogFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// Log debug errors.
+const ERDebug EventType = "ERDebug"
+
 func erDebugFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
@@ -331,6 +332,9 @@ func erDebugFunc(ctx context.Context, p *Process) func() {
 
 	return fn
 }
+
+// Log and exit system.
+const ERFatal EventType = "ERFatal"
 
 func erFatalFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
@@ -353,6 +357,11 @@ func erFatalFunc(ctx context.Context, p *Process) func() {
 // -----------------------------------------------------------------------------
 // Supervisor functions
 // -----------------------------------------------------------------------------
+
+// Handling pids within the system.
+// The structure of the ev.Cmd is a slice of string:
+// []string{"action","pid","process name"}
+const ETPid EventType = "ETPid"
 
 type pidAction string
 
