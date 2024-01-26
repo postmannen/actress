@@ -22,20 +22,55 @@ func newProcesses() *processes {
 	return &p
 }
 
-type pids struct {
+type pidnr int
+type pidVsProcMap map[pidnr]*Process
+
+type pidToProc struct {
 	mu sync.Mutex
-	nr int
+	mp pidVsProcMap
+}
+
+// Add a pid and process to the map.
+func (p *pidToProc) add(pid pidnr, proc *Process) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mp[pid] = proc
+}
+
+// Get the *Process based on the pid.
+func (p *pidToProc) getProc(pid pidnr) *Process {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	proc, ok := p.mp[pid]
+	if !ok {
+		return nil
+	}
+	return proc
+}
+
+func newPidToProc() *pidToProc {
+	p := pidToProc{
+		mp: make(pidVsProcMap),
+	}
+	return &p
+}
+
+type pids struct {
+	mu     sync.Mutex
+	nr     pidnr
+	toProc pidToProc
 }
 
 func newPids() *pids {
 	p := pids{
-		nr: 0,
+		nr:     0,
+		toProc: *newPidToProc(),
 	}
 
 	return &p
 }
 
-func (p *pids) next() int {
+func (p *pids) next() pidnr {
 	p.mu.Lock()
 	nr := p.nr
 	p.nr++
@@ -65,7 +100,7 @@ type Process struct {
 	// process ID struct
 	pids *pids
 	// PID of the process
-	PID int
+	PID pidnr
 }
 
 // Checks if the event is defined in the map, and returns true if it is.
@@ -89,7 +124,7 @@ func (p *Process) IsEventDefined(ev EventType) bool {
 func NewRootProcess(ctx context.Context) *Process {
 	conf := NewConfig()
 
-	a := Process{
+	p := Process{
 		fn:        nil,
 		InCh:      make(chan Event),
 		EventCh:   make(chan Event),
@@ -101,28 +136,28 @@ func NewRootProcess(ctx context.Context) *Process {
 		pids:      newPids(),
 	}
 
-	a.PID = a.pids.nr
+	p.PID = p.pids.nr
 
 	// Register all the standard child processes that should
 	// spawn off the root process
-	if a.Config.Profiling {
-		NewProcess(ctx, a, ETProfiling, procProfilingFunc).Act()
+	if p.Config.Profiling {
+		NewProcess(ctx, p, ETProfiling, procProfilingFunc).Act()
 	}
 
-	NewProcess(ctx, a, ETRouter, procRouterFunc).Act()
-	NewProcess(ctx, a, ETOsSignal, procOsSignalFunc).Act()
-	NewProcess(ctx, a, ETPid, procPidFunc).Act()
+	NewProcess(ctx, p, ETRouter, procRouterFunc).Act()
+	NewProcess(ctx, p, ETOsSignal, procOsSignalFunc).Act()
+	NewProcess(ctx, p, ETPid, procPidFunc).Act()
 
-	NewProcess(ctx, a, ETDone, procDoneFunc).Act()
-	NewProcess(ctx, a, ETPrint, procPrintFunc).Act()
-	NewProcess(ctx, a, ETExit, procExitFunc).Act()
+	NewProcess(ctx, p, ETDone, procDoneFunc).Act()
+	NewProcess(ctx, p, ETPrint, procPrintFunc).Act()
+	NewProcess(ctx, p, ETExit, procExitFunc).Act()
 
-	NewProcess(ctx, a, ERRouter, procErrorRouterFunc).Act()
-	NewProcess(ctx, a, ERLog, procErrorLogFunc).Act()
-	NewProcess(ctx, a, ERDebug, procDebugLogFunc).Act()
-	NewProcess(ctx, a, ERFatal, procFatalLogFunc).Act()
+	NewProcess(ctx, p, ERRouter, procErrorRouterFunc).Act()
+	NewProcess(ctx, p, ERLog, procErrorLogFunc).Act()
+	NewProcess(ctx, p, ERDebug, procDebugLogFunc).Act()
+	NewProcess(ctx, p, ERFatal, procFatalLogFunc).Act()
 
-	return &a
+	return &p
 }
 
 // newProcess will prepare and return a *Process. If empty parentP process
