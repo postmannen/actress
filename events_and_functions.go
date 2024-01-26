@@ -50,19 +50,22 @@ const (
 	ETRoot EventType = "ETRoot"
 	// Router for normal events.
 	ETRouter EventType = "ETRouter"
-	// Exit the system.
+	// Will exit and kill all processes.
 	ETExit EventType = "ETExit"
 	// Press ctrl+c to exit.
 	ETOsSignal EventType = "ETOsSignal"
 	// Profiling.
 	ETProfiling EventType = "ETprofiling"
-	// Print the content of the .Data field of the event.
+	// Print the content of the .Data field of the event to
+	// stdout.
 	ETPrint EventType = "ETPrint"
 	// Done don't currently do anything.
 	ETDone EventType = "ETDone"
 	// Handling pids within the system.
+	// The structure of the ev.Cmd is a slice of string:
+	// []string{"action","pid","process name"}
 	ETPid EventType = "ETPid"
-	// For getting the result in tests.
+	// Will forward the incomming event to the Process.TestCh.
 	ETTestCh EventType = "ETTestCh"
 	// Get all the current processes running. Will return a
 	// json encoded PidVsProcMap.
@@ -92,7 +95,8 @@ type pFunc func(context.Context, *Process) func()
 // Builtin standard functions
 // -----------------------------------------------------------------------------
 
-// Process function for routing and handling events.
+// Process function for routing and handling events. Will check
+// and route the event to the correct process.
 func etRouterFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
@@ -130,6 +134,7 @@ func etOsSignalFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// Will forward the event to the Process.TestCh.
 func etTestChFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
@@ -151,6 +156,7 @@ func etTestChFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// Get all the pids and processes, encode it into json.
 func etPidGetAllFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
@@ -221,6 +227,7 @@ func etDoneFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// Print the content of the .Data field of the event to stdout.
 func etPrintFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
@@ -239,6 +246,7 @@ func etPrintFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// Will exit and kill all processes.
 func etExitFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
