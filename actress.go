@@ -175,12 +175,8 @@ func NewRootProcess(ctx context.Context) *Process {
 	return &p
 }
 
-// newProcess will prepare and return a *Process. If empty parentP process
-// and empty event EventType are provided as input it indicates that this
-// is the first process to be created, and a root process are returned. A
-// root process is the first process to create. When new child processes
-// are created later they should reference the root process by providing it
-// as the parentP argument.
+// NewProcess will prepare and return a *Process. It will copy
+// channels and map structures from the root process.
 func NewProcess(ctx context.Context, parentP Process, event EventType, fn pFunc) *Process {
 	p := Process{
 		fn:        nil,
@@ -190,6 +186,7 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn pFunc)
 		Event:     event,
 		Processes: parentP.Processes,
 		isRoot:    false,
+		Config:    parentP.Config,
 		pids:      parentP.pids,
 		PID:       parentP.pids.next(),
 	}
@@ -221,6 +218,8 @@ func (p *Process) Act() error {
 		//go p.fn()
 		return nil
 	}
+
+	p.pids.toProc.add(p.PID, p)
 
 	go p.fn()
 

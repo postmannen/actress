@@ -103,6 +103,27 @@ func TestEventSliceProcs(t *testing.T) {
 	}
 }
 
+func TestPids(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rootp := NewRootProcess(ctx)
+	err := rootp.Act()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Since ETRouter is the first process to be started we can
+	// check that the first value in the map is an ETRouter.
+	if p := rootp.pids.toProc.getProc(0); p.Event != ETRouter {
+		t.Fatalf("error: process nr 0 was not ETRouter\n")
+	}
+}
+
+// -------------------------------------------------------------
+// Benchmarks
+// -------------------------------------------------------------
+
 func BenchmarkSingleProcess(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
