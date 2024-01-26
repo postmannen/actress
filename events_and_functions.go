@@ -64,7 +64,8 @@ const (
 	ETPid EventType = "ETPid"
 	// For getting the result in tests.
 	ETTestCh EventType = "ETTestCh"
-	// Get all the current processes running.
+	// Get all the current processes running. Will return a
+	// json encoded PidVsProcMap.
 	ETPidGetAll EventType = "ETPidGetAll"
 
 	// Router for error events.
@@ -201,6 +202,7 @@ func etProfilingFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// TODO: Check if there is still a good need for this.
 func etDoneFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
@@ -226,8 +228,7 @@ func etPrintFunc(ctx context.Context, p *Process) func() {
 			case d := <-p.InCh:
 
 				go func() {
-					fmt.Printf("info: got event ETPrint: %v\n", string(d.Data))
-					p.AddEvent(Event{EventType: ETDone, Data: []byte("finished printing the event")})
+					fmt.Printf("%v\n", string(d.Data))
 				}()
 			case <-ctx.Done():
 				return
@@ -347,7 +348,6 @@ func erFatalFunc(ctx context.Context, p *Process) func() {
 
 type pidAction string
 
-const pidPut pidAction = "pidPut"
 const pidGet pidAction = "pidGet"
 const pidGetAll pidAction = "pidGetAll"
 
@@ -356,8 +356,6 @@ const pidGetAll pidAction = "pidGetAll"
 // []string{"action","pid","process name"}
 func etPidFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
-		pids := make(map[int]string)
-
 		for {
 			select {
 			case ev := <-p.InCh:
@@ -370,13 +368,14 @@ func etPidFunc(ctx context.Context, p *Process) func() {
 
 				// Check the type of action we got.
 				switch action {
-				case pidPut:
-					pids[pid] = procName
 				case pidGet:
-					p.AddEvent(Event{EventType: ETPrint, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
+					p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
+
 				case pidGetAll:
-					for pid, procName := range pids {
-						p.AddEvent(Event{EventType: ETPrint, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
+					pidProcMap := p.pids.toProc.copyOfMap()
+					for pid, procName := range *pidProcMap {
+
+						p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
 					}
 				}
 

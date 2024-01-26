@@ -23,12 +23,12 @@ func newProcesses() *processes {
 }
 
 type pidnr int
-type pidVsProcMap map[pidnr]*Process
+type PidVsProcMap map[pidnr]*Process
 
 // Holds information about the relation between a pid and it's process.
 type pidToProc struct {
 	mu sync.Mutex
-	mp pidVsProcMap
+	mp PidVsProcMap
 }
 
 // Add a pid and process to the map.
@@ -50,8 +50,8 @@ func (p *pidToProc) getProc(pid pidnr) *Process {
 }
 
 // Return a copy of the pid vs *Processes map.
-func (p *pidToProc) copyOfMap() *pidVsProcMap {
-	m := make(pidVsProcMap)
+func (p *pidToProc) copyOfMap() *PidVsProcMap {
+	m := make(PidVsProcMap)
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -65,7 +65,7 @@ func (p *pidToProc) copyOfMap() *pidVsProcMap {
 
 func newPidToProc() *pidToProc {
 	p := pidToProc{
-		mp: make(pidVsProcMap),
+		mp: make(PidVsProcMap),
 	}
 	return &p
 }

@@ -134,7 +134,7 @@ func TestPidToProcMap(t *testing.T) {
 	rootp.AddEvent(Event{EventType: ETPidGetAll, NextEvent: &Event{EventType: ETTestCh}})
 
 	ev := <-rootp.TestCh
-	mapFromEv := make(pidVsProcMap)
+	mapFromEv := make(PidVsProcMap)
 
 	err = json.Unmarshal(ev.Data, &mapFromEv)
 	if err != nil {
