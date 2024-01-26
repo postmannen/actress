@@ -159,23 +159,23 @@ func NewRootProcess(ctx context.Context) *Process {
 	// Register all the standard child processes that should
 	// spawn off the root process
 	if p.Config.Profiling {
-		NewProcess(ctx, p, ETProfiling, procProfilingFunc).Act()
+		NewProcess(ctx, p, ETProfiling, etProfilingFunc).Act()
 	}
 
-	NewProcess(ctx, p, ETRouter, procRouterFunc).Act()
-	NewProcess(ctx, p, ETOsSignal, procOsSignalFunc).Act()
-	NewProcess(ctx, p, ETTestCh, procETTestChFunc).Act()
-	NewProcess(ctx, p, ETPid, procPidFunc).Act()
+	NewProcess(ctx, p, ETRouter, etRouterFunc).Act()
+	NewProcess(ctx, p, ETOsSignal, etOsSignalFunc).Act()
+	NewProcess(ctx, p, ETTestCh, etTestChFunc).Act()
+	NewProcess(ctx, p, ETPid, etPidFunc).Act()
 
-	NewProcess(ctx, p, ETDone, procDoneFunc).Act()
-	NewProcess(ctx, p, ETPrint, procPrintFunc).Act()
-	NewProcess(ctx, p, ETExit, procExitFunc).Act()
-	NewProcess(ctx, p, ETPidGetAll, procPidGetAllFunc).Act()
+	NewProcess(ctx, p, ETDone, etDoneFunc).Act()
+	NewProcess(ctx, p, ETPrint, etPrintFunc).Act()
+	NewProcess(ctx, p, ETExit, etExitFunc).Act()
+	NewProcess(ctx, p, ETPidGetAll, etPidGetAllFunc).Act()
 
-	NewProcess(ctx, p, ERRouter, procErrorRouterFunc).Act()
-	NewProcess(ctx, p, ERLog, procErrorLogFunc).Act()
-	NewProcess(ctx, p, ERDebug, procDebugLogFunc).Act()
-	NewProcess(ctx, p, ERFatal, procFatalLogFunc).Act()
+	NewProcess(ctx, p, ERRouter, erRouterFunc).Act()
+	NewProcess(ctx, p, ERLog, erLogFunc).Act()
+	NewProcess(ctx, p, ERDebug, erDebugFunc).Act()
+	NewProcess(ctx, p, ERFatal, erFatalFunc).Act()
 
 	return &p
 }

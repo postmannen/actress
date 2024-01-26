@@ -92,7 +92,7 @@ type pFunc func(context.Context, *Process) func()
 // -----------------------------------------------------------------------------
 
 // Process function for routing and handling events.
-func procRouterFunc(ctx context.Context, p *Process) func() {
+func etRouterFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -114,7 +114,7 @@ func procRouterFunc(ctx context.Context, p *Process) func() {
 }
 
 // Process function for handling CTRL+C pressed.
-func procOsSignalFunc(ctx context.Context, p *Process) func() {
+func etOsSignalFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		// Wait for ctrl+c to stop the server.
 		sigCh := make(chan os.Signal, 1)
@@ -129,7 +129,7 @@ func procOsSignalFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-func procETTestChFunc(ctx context.Context, p *Process) func() {
+func etTestChFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -150,7 +150,7 @@ func procETTestChFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-func procPidGetAllFunc(ctx context.Context, p *Process) func() {
+func etPidGetAllFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -176,7 +176,7 @@ func procPidGetAllFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-func procProfilingFunc(ctx context.Context, p *Process) func() {
+func etProfilingFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		//defer profile.Start(profile.BlockProfile).Stop()
 		//defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
@@ -201,7 +201,7 @@ func procProfilingFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-func procDoneFunc(ctx context.Context, p *Process) func() {
+func etDoneFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			d := <-p.InCh
@@ -219,7 +219,7 @@ func procDoneFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-func procPrintFunc(ctx context.Context, p *Process) func() {
+func etPrintFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -238,7 +238,7 @@ func procPrintFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-func procExitFunc(ctx context.Context, p *Process) func() {
+func etExitFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -262,7 +262,7 @@ func procExitFunc(ctx context.Context, p *Process) func() {
 // -----------------------------------------------------------------------------
 
 // Process function for routing and handling events.
-func procErrorRouterFunc(ctx context.Context, p *Process) func() {
+func erRouterFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -287,7 +287,7 @@ func procErrorRouterFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-func procErrorLogFunc(ctx context.Context, p *Process) func() {
+func erLogFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -305,7 +305,7 @@ func procErrorLogFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-func procDebugLogFunc(ctx context.Context, p *Process) func() {
+func erDebugFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -323,7 +323,7 @@ func procDebugLogFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-func procFatalLogFunc(ctx context.Context, p *Process) func() {
+func erFatalFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -354,7 +354,7 @@ const pidGetAll pidAction = "pidGetAll"
 // Handle pids.
 // The structure of the ev.Cmd is a slice of string:
 // []string{"action","pid","process name"}
-func procPidFunc(ctx context.Context, p *Process) func() {
+func etPidFunc(ctx context.Context, p *Process) func() {
 	fn := func() {
 		pids := make(map[int]string)
 
