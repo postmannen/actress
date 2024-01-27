@@ -167,6 +167,8 @@ func NewRootProcess(ctx context.Context) *Process {
 	NewProcess(ctx, p, ETTestCh, etTestChFn).Act()
 	NewProcess(ctx, p, ETPid, etPidFn).Act()
 	NewProcess(ctx, p, ETWatchEventFile, wrapperETWatchEventFileFn("tmp", ".json")).Act()
+	NewProcess(ctx, p, ETReadFile, ETReadFileFn).Act()
+	NewProcess(ctx, p, ETCustomEvent, ETCustomEventFn).Act()
 
 	NewProcess(ctx, p, ETDone, etDoneFn).Act()
 	NewProcess(ctx, p, ETPrint, etPrintFn).Act()

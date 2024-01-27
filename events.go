@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -435,10 +436,11 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 							if ext == extension {
 								log.Printf("op: %v, file : %v, extension: %v\n", event.Op, fileName, ext)
 							}
+							p.AddEvent(Event{EventType: ETReadFile, Cmd: []string{event.Name}})
 						case event.Has(fsnotify.Remove):
 							fileName := filepath.Base(event.Name)
 							ext := filepath.Ext(fileName)
-							log.Printf("op: %v, file : %v, extension: %v\n", event.Op, fileName, ext)
+							log.Printf("remove : op: %v, file : %v, extension: %v\n", event.Op, fileName, ext)
 						}
 					case err, ok := <-watcher.Errors:
 						if !ok {
@@ -451,7 +453,7 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 				}
 			}()
 
-			// Add a path.
+			// Add a path to watch
 			err = watcher.Add(path)
 			if err != nil {
 				log.Fatal(err)
@@ -471,4 +473,65 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 	}
 
 	return fønk
+}
+
+// Read file. The path path to read should be in Event.Cmd[0].
+const ETReadFile EventType = "ETReadFile"
+
+func ETReadFileFn(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			select {
+			case ev := <-p.InCh:
+
+				go func() {
+					fh, err := os.Open(ev.Cmd[0])
+					if err != nil {
+						log.Fatalf("failed to open file: %v\n", err)
+					}
+					defer fh.Close()
+
+					b, err := io.ReadAll(fh)
+					if err != nil {
+						log.Fatalf("failed to open file: %v\n", err)
+					}
+
+					p.AddEvent(Event{EventType: ETCustomEvent, Data: b})
+				}()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	return fn
+}
+
+type customEvent struct {
+	Name string
+	API  []string
+}
+
+// Log and exit system.
+const ETCustomEvent EventType = "ETCustomEvent"
+
+func ETCustomEventFn(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			select {
+			case ev := <-p.InCh:
+				go func() {
+					ce := customEvent{}
+					err := json.Unmarshal(ev.Data, &ce)
+					if err != nil {
+						log.Fatalf("failed to unmarshal custom event data: %v\n", err)
+					}
+				}()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	return fn
 }
