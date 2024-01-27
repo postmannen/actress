@@ -75,7 +75,9 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 		for {
 			select {
 			case e := <-p.EventCh:
-				p.Processes.inChMap[e.EventType] <- e
+				p.Processes.mu.Lock()
+				p.Processes.procMap[e.EventType].InCh <- e
+				p.Processes.mu.Unlock()
 
 			case <-ctx.Done():
 				p.AddError(Event{
@@ -276,7 +278,9 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 			case e := <-p.ErrorCh:
 
 				go func() {
-					p.Processes.inChMap[e.EventType] <- e
+					p.Processes.mu.Lock()
+					p.Processes.procMap[e.EventType].InCh <- e
+					p.Processes.mu.Lock()
 				}()
 
 			case <-ctx.Done():

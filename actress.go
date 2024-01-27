@@ -9,15 +9,13 @@ import (
 // who belongs to what event, and also a map of the started
 // processes.
 type processes struct {
-	inChMap  map[EventType]chan Event
-	pFuncMap map[EventType]ETFunc
-	// mu   sync.Mutex
+	procMap map[EventType]*Process
+	mu      sync.Mutex
 }
 
 func newProcesses() *processes {
 	p := processes{
-		inChMap:  make(map[EventType]chan Event),
-		pFuncMap: make(map[EventType]ETFunc),
+		procMap: make(map[EventType]*Process),
 	}
 	return &p
 }
@@ -118,11 +116,15 @@ type Process struct {
 	pids *pids
 	// PID of the process
 	PID pidnr
+	// Cancel func
+	cancel context.CancelFunc
 }
 
 // Checks if the event is defined in the map, and returns true if it is.
 func (p *Process) IsEventDefined(ev EventType) bool {
-	if _, ok := p.Processes.inChMap[ev]; !ok {
+	p.Processes.mu.Lock()
+	defer p.Processes.mu.Unlock()
+	if _, ok := p.Processes.procMap[ev]; !ok {
 		return false
 	}
 
@@ -139,6 +141,7 @@ func (p *Process) IsEventDefined(ev EventType) bool {
 // processes needed, like the event router, and various standard
 // error handling processes.
 func NewRootProcess(ctx context.Context) *Process {
+	ctx, cancel := context.WithCancel(ctx)
 	conf := NewConfig()
 
 	p := Process{
@@ -152,6 +155,7 @@ func NewRootProcess(ctx context.Context) *Process {
 		isRoot:    true,
 		Config:    conf,
 		pids:      newPids(),
+		cancel:    cancel,
 	}
 
 	p.PID = p.pids.nr
@@ -186,6 +190,7 @@ func NewRootProcess(ctx context.Context) *Process {
 // NewProcess will prepare and return a *Process. It will copy
 // channels and map structures from the root process.
 func NewProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc) *Process {
+	ctx, cancel := context.WithCancel(ctx)
 	p := Process{
 		fn:        nil,
 		InCh:      make(chan Event),
@@ -198,12 +203,15 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc
 		Config:    parentP.Config,
 		pids:      parentP.pids,
 		PID:       parentP.pids.next(),
+		cancel:    cancel,
 	}
 
 	// Register the InCh of the process in the inchMap so the root
 	// process router func are able to route the Events to the
 	// correct process
-	p.Processes.inChMap[event] = p.InCh
+	p.Processes.mu.Lock()
+	p.Processes.procMap[event] = &p
+	p.Processes.mu.Unlock()
 
 	if fn != nil {
 		p.fn = fn(ctx, &p)
