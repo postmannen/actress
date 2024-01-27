@@ -13,6 +13,29 @@ type processes struct {
 	mu      sync.Mutex
 }
 
+func (p *processes) add(et EventType, proc *Process) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.procMap[et] = proc
+}
+
+func (p *processes) delete(et EventType, proc *Process) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.procMap, et)
+}
+
+// Checks if the event is defined in the map, and returns true if it is.
+func (p *processes) IsEventDefined(ev EventType) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, ok := p.procMap[ev]; !ok {
+		return false
+	}
+
+	return true
+}
+
 func newProcesses() *processes {
 	p := processes{
 		procMap: make(map[EventType]*Process),
@@ -120,17 +143,6 @@ type Process struct {
 	cancel context.CancelFunc
 }
 
-// Checks if the event is defined in the map, and returns true if it is.
-func (p *Process) IsEventDefined(ev EventType) bool {
-	p.Processes.mu.Lock()
-	defer p.Processes.mu.Unlock()
-	if _, ok := p.Processes.procMap[ev]; !ok {
-		return false
-	}
-
-	return true
-}
-
 // NewRootProcess will prepare and return the root process
 // which holds all the core elements needed, like the main
 // channels for events and errors, and varouis registers or
@@ -173,6 +185,7 @@ func NewRootProcess(ctx context.Context) *Process {
 	NewProcess(ctx, p, ETWatchEventFile, wrapperETWatchEventFileFn("tmp", ".json")).Act()
 	NewProcess(ctx, p, ETReadFile, ETReadFileFn).Act()
 	NewProcess(ctx, p, ETCustomEvent, ETCustomEventFn).Act()
+	NewProcess(ctx, p, ETOsCmd, etOsCmdFn).Act()
 
 	NewProcess(ctx, p, ETDone, etDoneFn).Act()
 	NewProcess(ctx, p, ETPrint, etPrintFn).Act()
@@ -206,12 +219,7 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc
 		cancel:    cancel,
 	}
 
-	// Register the InCh of the process in the inchMap so the root
-	// process router func are able to route the Events to the
-	// correct process
-	p.Processes.mu.Lock()
-	p.Processes.procMap[event] = &p
-	p.Processes.mu.Unlock()
+	p.Processes.add(event, &p)
 
 	if fn != nil {
 		p.fn = fn(ctx, &p)

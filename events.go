@@ -1,6 +1,7 @@
 package actress
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,9 +9,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/pkg/profile"
@@ -534,6 +537,44 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 			case <-ctx.Done():
 				return
 			}
+		}
+	}
+
+	return fn
+}
+
+// Execute OS commands. The command to execute should be put in the first slot
+// of the arrat at Event.Cmd[0], and all arguments should be put int the sub
+// sequent slots. To make it simpler to run commands without splitting the up
+// on Linux like operating systems use the -c flag with bash. Example,
+// Event{EventType: etOsCmd, Cmd: ["bash","-c","ls -l|grep myfile"]}.
+const ETOsCmd EventType = "etOsCmd"
+
+func etOsCmdFn(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			d := <-p.InCh
+
+			go func() {
+				ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(5))
+				defer cancel()
+
+				args := d.Cmd[1:]
+				cmd := exec.CommandContext(ctx, d.Cmd[0], args...)
+				var outText bytes.Buffer
+				var errText bytes.Buffer
+				cmd.Stdout = &outText
+				cmd.Stderr = &errText
+				cmd.WaitDelay = time.Second * 5
+
+				err := cmd.Run()
+				if err != nil {
+					p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, errText.String())})
+				}
+
+				p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
+
+			}()
 		}
 	}
 
