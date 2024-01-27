@@ -43,7 +43,7 @@ func TestEventProcs(t *testing.T) {
 	}
 }
 
-func TestEventSliceProcs(t *testing.T) {
+func TestNextEventProcs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

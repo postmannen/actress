@@ -10,14 +10,14 @@ import (
 // processes.
 type processes struct {
 	inChMap  map[EventType]chan Event
-	pFuncMap map[EventType]pFunc
+	pFuncMap map[EventType]ETFunc
 	// mu   sync.Mutex
 }
 
 func newProcesses() *processes {
 	p := processes{
 		inChMap:  make(map[EventType]chan Event),
-		pFuncMap: make(map[EventType]pFunc),
+		pFuncMap: make(map[EventType]ETFunc),
 	}
 	return &p
 }
@@ -159,30 +159,31 @@ func NewRootProcess(ctx context.Context) *Process {
 	// Register all the standard child processes that should
 	// spawn off the root process
 	if p.Config.Profiling {
-		NewProcess(ctx, p, ETProfiling, etProfilingFunc).Act()
+		NewProcess(ctx, p, ETProfiling, etProfilingFn).Act()
 	}
 
-	NewProcess(ctx, p, ETRouter, etRouterFunc).Act()
-	NewProcess(ctx, p, ETOsSignal, etOsSignalFunc).Act()
-	NewProcess(ctx, p, ETTestCh, etTestChFunc).Act()
-	NewProcess(ctx, p, ETPid, etPidFunc).Act()
+	NewProcess(ctx, p, ETRouter, etRouterFn).Act()
+	NewProcess(ctx, p, ETOsSignal, etOsSignalFn).Act()
+	NewProcess(ctx, p, ETTestCh, etTestChFn).Act()
+	NewProcess(ctx, p, ETPid, etPidFn).Act()
+	NewProcess(ctx, p, ETWatchEventFile, wrapperETWatchEventFileFn("tmp", ".json")).Act()
 
-	NewProcess(ctx, p, ETDone, etDoneFunc).Act()
-	NewProcess(ctx, p, ETPrint, etPrintFunc).Act()
-	NewProcess(ctx, p, ETExit, etExitFunc).Act()
-	NewProcess(ctx, p, ETPidGetAll, etPidGetAllFunc).Act()
+	NewProcess(ctx, p, ETDone, etDoneFn).Act()
+	NewProcess(ctx, p, ETPrint, etPrintFn).Act()
+	NewProcess(ctx, p, ETExit, etExitFn).Act()
+	NewProcess(ctx, p, ETPidGetAll, etPidGetAllFn).Act()
 
-	NewProcess(ctx, p, ERRouter, erRouterFunc).Act()
-	NewProcess(ctx, p, ERLog, erLogFunc).Act()
-	NewProcess(ctx, p, ERDebug, erDebugFunc).Act()
-	NewProcess(ctx, p, ERFatal, erFatalFunc).Act()
+	NewProcess(ctx, p, ERRouter, erRouterFn).Act()
+	NewProcess(ctx, p, ERLog, erLogFn).Act()
+	NewProcess(ctx, p, ERDebug, erDebugFn).Act()
+	NewProcess(ctx, p, ERFatal, erFatalFn).Act()
 
 	return &p
 }
 
 // NewProcess will prepare and return a *Process. It will copy
 // channels and map structures from the root process.
-func NewProcess(ctx context.Context, parentP Process, event EventType, fn pFunc) *Process {
+func NewProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc) *Process {
 	p := Process{
 		fn:        nil,
 		InCh:      make(chan Event),

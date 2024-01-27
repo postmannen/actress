@@ -8,8 +8,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/pkg/profile"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -48,7 +50,7 @@ type EventType string
 // For the main Root process.
 const ETRoot EventType = "ETRoot"
 
-type pFunc func(context.Context, *Process) func()
+type ETFunc func(context.Context, *Process) func()
 
 // -----------------------------------------------------------------------------
 // Startup processes function
@@ -67,7 +69,7 @@ const ETRouter EventType = "ETRouter"
 
 // Process function for routing and handling events. Will check
 // and route the event to the correct process.
-func etRouterFunc(ctx context.Context, p *Process) func() {
+func etRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -92,7 +94,7 @@ func etRouterFunc(ctx context.Context, p *Process) func() {
 const ETOsSignal EventType = "ETOsSignal"
 
 // Process function for handling CTRL+C pressed.
-func etOsSignalFunc(ctx context.Context, p *Process) func() {
+func etOsSignalFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		// Wait for ctrl+c to stop the server.
 		sigCh := make(chan os.Signal, 1)
@@ -111,7 +113,7 @@ func etOsSignalFunc(ctx context.Context, p *Process) func() {
 const ETTestCh EventType = "ETTestCh"
 
 // Will forward the event to the Process.TestCh.
-func etTestChFunc(ctx context.Context, p *Process) func() {
+func etTestChFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -137,7 +139,7 @@ func etTestChFunc(ctx context.Context, p *Process) func() {
 const ETPidGetAll EventType = "ETPidGetAll"
 
 // Get all the pids and processes, encode it into json.
-func etPidGetAllFunc(ctx context.Context, p *Process) func() {
+func etPidGetAllFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -166,7 +168,7 @@ func etPidGetAllFunc(ctx context.Context, p *Process) func() {
 // Profiling.
 const ETProfiling EventType = "ETprofiling"
 
-func etProfilingFunc(ctx context.Context, p *Process) func() {
+func etProfilingFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		//defer profile.Start(profile.BlockProfile).Stop()
 		//defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
@@ -195,7 +197,7 @@ func etProfilingFunc(ctx context.Context, p *Process) func() {
 const ETDone EventType = "ETDone"
 
 // TODO: Check if there is still a good need for this.
-func etDoneFunc(ctx context.Context, p *Process) func() {
+func etDoneFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			d := <-p.InCh
@@ -217,7 +219,7 @@ func etDoneFunc(ctx context.Context, p *Process) func() {
 const ETPrint EventType = "ETPrint"
 
 // Print the content of the .Data field of the event to stdout.
-func etPrintFunc(ctx context.Context, p *Process) func() {
+func etPrintFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -239,7 +241,7 @@ func etPrintFunc(ctx context.Context, p *Process) func() {
 const ETExit EventType = "ETExit"
 
 // Will exit and kill all processes.
-func etExitFunc(ctx context.Context, p *Process) func() {
+func etExitFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -266,7 +268,7 @@ func etExitFunc(ctx context.Context, p *Process) func() {
 const ERRouter EventType = "ERRouter"
 
 // Process function for routing and handling events.
-func erRouterFunc(ctx context.Context, p *Process) func() {
+func erRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -294,7 +296,7 @@ func erRouterFunc(ctx context.Context, p *Process) func() {
 // Log errors.
 const ERLog EventType = "ERLog"
 
-func erLogFunc(ctx context.Context, p *Process) func() {
+func erLogFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -315,7 +317,7 @@ func erLogFunc(ctx context.Context, p *Process) func() {
 // Log debug errors.
 const ERDebug EventType = "ERDebug"
 
-func erDebugFunc(ctx context.Context, p *Process) func() {
+func erDebugFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -336,7 +338,7 @@ func erDebugFunc(ctx context.Context, p *Process) func() {
 // Log and exit system.
 const ERFatal EventType = "ERFatal"
 
-func erFatalFunc(ctx context.Context, p *Process) func() {
+func erFatalFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -354,10 +356,6 @@ func erFatalFunc(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-// -----------------------------------------------------------------------------
-// Supervisor functions
-// -----------------------------------------------------------------------------
-
 // Handling pids within the system.
 // The structure of the ev.Cmd is a slice of string:
 // []string{"action","pid","process name"}
@@ -371,7 +369,7 @@ const pidGetAll pidAction = "pidGetAll"
 // Handle pids.
 // The structure of the ev.Cmd is a slice of string:
 // []string{"action","pid","process name"}
-func etPidFunc(ctx context.Context, p *Process) func() {
+func etPidFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -403,4 +401,74 @@ func etPidFunc(ctx context.Context, p *Process) func() {
 	}
 
 	return fn
+}
+
+const ETWatchEventFile EventType = "ETWatchEventFile"
+
+// Watch for file changes in the given path, for files with the specified extension.
+// A wrapper function have been put around this function to be able to inject the
+// path and the extension parameters. The returned result from the wrapper is a normal
+// ETFunc, and same as the other ETFunctions specified to be used with an EventType.
+func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
+	fønk := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			// Create new watcher.
+			watcher, err := fsnotify.NewWatcher()
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer watcher.Close()
+
+			// Start listening for events.
+			go func() {
+				for {
+					select {
+					case event, ok := <-watcher.Events:
+						if !ok {
+							return
+						}
+						//log.Println("event:", event)
+						switch {
+						case event.Has(fsnotify.Write) || event.Has(fsnotify.Chmod) || event.Has(fsnotify.Create):
+							fileName := filepath.Base(event.Name)
+							ext := filepath.Ext(fileName)
+							if ext == extension {
+								log.Printf("op: %v, file : %v, extension: %v\n", event.Op, fileName, ext)
+							}
+						case event.Has(fsnotify.Remove):
+							fileName := filepath.Base(event.Name)
+							ext := filepath.Ext(fileName)
+							log.Printf("op: %v, file : %v, extension: %v\n", event.Op, fileName, ext)
+						}
+					case err, ok := <-watcher.Errors:
+						if !ok {
+							return
+						}
+						log.Println("error:", err)
+					case <-ctx.Done():
+						return
+					}
+				}
+			}()
+
+			// Add a path.
+			err = watcher.Add(path)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			for {
+				select {
+				case <-p.InCh:
+
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	return fønk
 }
