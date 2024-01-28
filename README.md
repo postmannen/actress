@@ -2,11 +2,19 @@
 
 A Concurrent Actor framework written in Go.
 
-## Processes, Events and process Functions
+## Processes
 
-A process are like a module capable of performing a specific tasks. The nature of the process is determined by the code attached to each process. This code is encapsulated within a process function block which is registered to the process.
+A process are like a module capable of performing a specific tasks. The nature of the process is determined by an EventType and a Function attached to each process. A process have an InCh for receiving events, and an AddEvent for sending Events. The processes can themselves spawn new processes. Processes can also send Event messages to other processes.
 
-To initiate a task and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as communication channels within the system. They can carry data, either as a result of something the previous process did, instructions for what a process should do, or both.
+## Events
+
+To initiate a task and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as communication channels within the system. They can carry data, either as a result of something the previous process did, instructions for what a process should do, or both. An event can contain a chain of events to create workflows of what do do and in what order by using the NextEvent feature (see example).
+
+## Event Functions
+
+Event Functions holds the logic for what to do when an event is received, and what to do with the data it holds.
+
+## Examples
 
 Check out the test files for examples for how to define an Event and it's Process function, or for more complete examples check out the [examples](examples/) folder.
 
