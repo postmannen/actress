@@ -431,27 +431,24 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 			go func() {
 				for {
 					select {
-					case event, ok := <-watcher.Events:
+					case fsEvent, ok := <-watcher.Events:
 						if !ok {
 							return
 						}
 						//log.Println("event:", event)
 						switch {
-						case event.Has(fsnotify.Write) || event.Has(fsnotify.Chmod) || event.Has(fsnotify.Create):
-							fileName := filepath.Base(event.Name)
+						case fsEvent.Has(fsnotify.Write) || fsEvent.Has(fsnotify.Chmod) || fsEvent.Has(fsnotify.Create):
+							//fileName := filepath.Base(fsEvent.Name)
+							//ext := filepath.Ext(fileName)
+							//if ext == extension {
+							//	log.Printf("op: %v, file : %v, extension: %v\n", fsEvent.Op, fileName, ext)
+							//}
+							p.AddEvent(Event{EventType: ETReadFile, Cmd: []string{fsEvent.Name},
+								NextEvent: &Event{EventType: ETCustomEvent}})
+						case fsEvent.Has(fsnotify.Remove):
+							fileName := filepath.Base(fsEvent.Name)
 							ext := filepath.Ext(fileName)
-							if ext == extension {
-								log.Printf("op: %v, file : %v, extension: %v\n", event.Op, fileName, ext)
-							}
-							p.AddEvent(Event{EventType: ETReadFile, Cmd: []string{event.Name}})
-						case event.Has(fsnotify.Remove):
-							fileName := filepath.Base(event.Name)
-							ext := filepath.Ext(fileName)
-							log.Printf("remove : op: %v, file : %v, extension: %v\n", event.Op, fileName, ext)
-							// TODO:
-							//   Read the file to get the event type
-							//   Create an eventtype that will delete the processes
-							//   based on the event type read from the file.
+							log.Printf("remove : op: %v, file : %v, extension: %v\n", fsEvent.Op, fileName, ext)
 						}
 					case err, ok := <-watcher.Errors:
 						if !ok {
@@ -507,7 +504,9 @@ func ETReadFileFn(ctx context.Context, p *Process) func() {
 						log.Fatalf("failed to open file: %v\n", err)
 					}
 
-					p.AddEvent(Event{EventType: ETCustomEvent, Data: b})
+					nEv := ev.NextEvent
+					nEv.Data = b
+					p.AddEvent(*nEv)
 				}()
 			case <-ctx.Done():
 				return
