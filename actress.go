@@ -16,12 +16,18 @@ type processes struct {
 func (p *processes) add(et EventType, proc *Process) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	// Check if a process for the same event is defined, and if so we
+	// cancel the current process before we replace it with a new one.
+	if _, ok := p.procMap[et]; ok {
+		p.procMap[et].cancel()
+	}
 	p.procMap[et] = proc
 }
 
 func (p *processes) delete(et EventType, proc *Process) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.procMap[et].cancel()
 	delete(p.procMap, et)
 }
 

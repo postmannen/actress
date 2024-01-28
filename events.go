@@ -448,6 +448,10 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 							fileName := filepath.Base(event.Name)
 							ext := filepath.Ext(fileName)
 							log.Printf("remove : op: %v, file : %v, extension: %v\n", event.Op, fileName, ext)
+							// TODO:
+							//   Read the file to get the event type
+							//   Create an eventtype that will delete the processes
+							//   based on the event type read from the file.
 						}
 					case err, ok := <-watcher.Errors:
 						if !ok {
@@ -519,7 +523,6 @@ type customEvent struct {
 	Cmd  []string
 }
 
-// Log and exit system.
 const ETCustomEvent EventType = "ETCustomEvent"
 
 func ETCustomEventFn(ctx context.Context, p *Process) func() {
@@ -534,14 +537,10 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 						log.Fatalf("failed to unmarshal custom event data: %v\n", err)
 					}
 
-					fmt.Printf("The unmarshaled struct: %#v\n", ce)
-
-					// Start up the new process
-					// TODO: If the process exist we should cancel the old one before we create the new one.
 					NewProcess(ctx, *p, EventType(ce.Name), WrapperCustomCmd(ce.Cmd)).Act()
 
-					p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ps aux"}})
-					//p.AddEvent(Event{EventType: ETOsCmd, Cmd: []string{"/bin/bash", "-c", ce.Cmd[2]}})
+					// DEBUG: Injecting an event for testing while developing.
+					p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
 				}()
 			case <-ctx.Done():
 				return
