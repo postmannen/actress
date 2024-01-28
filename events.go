@@ -516,7 +516,7 @@ func ETReadFileFn(ctx context.Context, p *Process) func() {
 
 type customEvent struct {
 	Name string
-	API  []string
+	Cmd  []string
 }
 
 // Log and exit system.
@@ -533,6 +533,9 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 					if err != nil {
 						log.Fatalf("failed to unmarshal custom event data: %v\n", err)
 					}
+
+					fmt.Printf("The unmarshaled struct: %#v\n", ce)
+					//p.AddEvent(Event{EventType: ETOsCmd, Cmd: []string{"/bin/bash", "-c", ce.Cmd[2]}})
 				}()
 			case <-ctx.Done():
 				return
@@ -541,6 +544,43 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 	}
 
 	return fn
+}
+
+// TODO !!! Figure out how to combine the 'command' that is injected via the wrapper
+// with the d.cmd comming from the event on the InCh.
+func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) func() {
+	fønk := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			for {
+				d := <-p.InCh
+
+				go func() {
+					ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(5))
+					defer cancel()
+
+					args := d.Cmd[1:]
+					cmd := exec.CommandContext(ctx, d.Cmd[0], args...)
+					var outText bytes.Buffer
+					var errText bytes.Buffer
+					cmd.Stdout = &outText
+					cmd.Stderr = &errText
+					cmd.WaitDelay = time.Second * 5
+
+					err := cmd.Run()
+					if err != nil {
+						p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, errText.String())})
+					}
+
+					p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
+
+				}()
+			}
+		}
+
+		return fn
+	}
+
+	return fønk
 }
 
 // Execute OS commands. The command to execute should be put in the first slot
