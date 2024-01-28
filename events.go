@@ -535,6 +535,12 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 					}
 
 					fmt.Printf("The unmarshaled struct: %#v\n", ce)
+
+					// Start up the new process
+					// TODO: If the process exist we should cancel the old one before we create the new one.
+					NewProcess(ctx, *p, EventType(ce.Name), WrapperCustomCmd(ce.Cmd)).Act()
+
+					p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ps aux"}})
 					//p.AddEvent(Event{EventType: ETOsCmd, Cmd: []string{"/bin/bash", "-c", ce.Cmd[2]}})
 				}()
 			case <-ctx.Done():
@@ -546,8 +552,15 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-// TODO !!! Figure out how to combine the 'command' that is injected via the wrapper
-// with the d.cmd comming from the event on the InCh.
+// Wrapper around creating an etFunc. The use of this wrapper function is to insert
+// some predefined values into the cmd to be executed when a process for the eventType
+// is created. When an event later is reveived, the content of the Event.Cmd field is
+// appended to what is already defined there from earlier.
+// An example of this is that we define the content of the command to be executed when
+// the process is defined to contain []string{"/bin/bash","-c"}. When an event later
+// is received and handled by this function, the contend of the .Cmd field is appended
+// to the predefined fields, and will for example give a result to be executed like
+// []string{"/bin/bash","-c","ls -l|grep file.txt"}.
 func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) func() {
 	fønk := func(ctx context.Context, p *Process) func() {
 		fn := func() {
@@ -558,8 +571,13 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 					ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(5))
 					defer cancel()
 
-					args := d.Cmd[1:]
-					cmd := exec.CommandContext(ctx, d.Cmd[0], args...)
+					// The command is located in the first field of the string slice.
+					// The rest of the arguments are in the remaining fields of the slice.
+					args := command[1:]
+					// Append the values of d.Cmd to the already existing values in args.
+					args = append(args, d.Cmd...)
+
+					cmd := exec.CommandContext(ctx, command[0], args...)
 					var outText bytes.Buffer
 					var errText bytes.Buffer
 					cmd.Stdout = &outText
