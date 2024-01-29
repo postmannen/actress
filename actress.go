@@ -186,6 +186,9 @@ func NewRootProcess(ctx context.Context) *Process {
 	if p.Config.Profiling {
 		NewProcess(ctx, p, ETProfiling, etProfilingFn).Act()
 	}
+	if p.Config.CustomEvents {
+		NewProcess(ctx, p, ETCustomEvent, ETCustomEventFn).Act()
+	}
 
 	NewProcess(ctx, p, ETRouter, etRouterFn).Act()
 	NewProcess(ctx, p, ETOsSignal, etOsSignalFn).Act()
@@ -193,7 +196,6 @@ func NewRootProcess(ctx context.Context) *Process {
 	NewProcess(ctx, p, ETPid, etPidFn).Act()
 	NewProcess(ctx, p, ETWatchEventFile, wrapperETWatchEventFileFn("tmp", ".json")).Act()
 	NewProcess(ctx, p, ETReadFile, ETReadFileFn).Act()
-	NewProcess(ctx, p, ETCustomEvent, ETCustomEventFn).Act()
 	NewProcess(ctx, p, ETOsCmd, etOsCmdFn).Act()
 
 	NewProcess(ctx, p, ETDone, etDoneFn).Act()

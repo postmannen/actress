@@ -83,6 +83,35 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 		for {
 			select {
 			case e := <-p.EventCh:
+				// Custom processes can take a little longer to start up and be
+				// registered in the map. We check here if process is registred,
+				// and it it is not we retry.
+				if _, ok := p.Processes.procMap[e.EventType]; !ok {
+					go func(ev Event) {
+						// Try to 3 times to deliver the message.
+						for i := 0; i < 3; i++ {
+							p.Processes.mu.Lock()
+							_, ok := p.Processes.procMap[e.EventType]
+							p.Processes.mu.Unlock()
+
+							if !ok {
+								p.AddError(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
+								time.Sleep(time.Millisecond * 500)
+								continue
+							}
+
+							// Process is now registred, so we can safely put
+							//the event on the InCh of the process.
+							p.Processes.mu.Lock()
+							p.Processes.procMap[e.EventType].InCh <- e
+							p.Processes.mu.Unlock()
+						}
+
+					}(e)
+					continue
+				}
+
+				// Process was registered. Deliver the event to the process InCh.
 				p.Processes.mu.Lock()
 				p.Processes.procMap[e.EventType].InCh <- e
 				p.Processes.mu.Unlock()
@@ -181,10 +210,11 @@ const ETProfiling EventType = "ETprofiling"
 
 func etProfilingFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer profile.Start(profile.MutexProfile).Stop()
 		//defer profile.Start(profile.BlockProfile).Stop()
 		//defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
 		//defer profile.Start(profile.TraceProfile, profile.ProfilePath(".")).Stop()
-		defer profile.Start(profile.MemProfile, profile.MemProfileRate(1)).Stop()
+		//defer profile.Start(profile.MemProfile, profile.MemProfileRate(1)).Stop()
 		//defer profile.Start(profile.MemProfileHeap).Stop()
 		//defer profile.Start(profile.MemProfileAllocs).Stop()
 
@@ -199,6 +229,7 @@ func etProfilingFn(ctx context.Context, p *Process) func() {
 		reg.MustRegister(procTotal)
 
 		http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+		//<-ctx.Done()
 	}
 
 	return fn
@@ -284,7 +315,7 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 				go func() {
 					p.Processes.mu.Lock()
 					p.Processes.procMap[e.EventType].InCh <- e
-					p.Processes.mu.Lock()
+					p.Processes.mu.Unlock()
 				}()
 
 			case <-ctx.Done():
@@ -430,6 +461,27 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 
 			// Start listening for events.
 			go func() {
+				// Before we start the watcher we want to check and handle the files
+				// that already are present in the directory.
+				err := filepath.Walk(path,
+					func(pth string, info os.FileInfo, err error) error {
+						if err != nil {
+							return err
+						}
+
+						// Check if the extension of the file is correct.
+						ext := filepath.Ext(pth)
+						if ext == extension {
+							p.AddEvent(Event{EventType: ETReadFile, Cmd: []string{pth},
+								NextEvent: &Event{EventType: ETCustomEvent}})
+						}
+
+						return nil
+					})
+				if err != nil {
+					log.Fatalf("filepath Walk failed: %v\n", err)
+				}
+
 				for {
 					select {
 					case fsEvent, ok := <-watcher.Events:
@@ -543,7 +595,6 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 					}
 
 					NewProcess(ctx, *p, EventType(ce.Name), WrapperCustomCmd(ce.Cmd)).Act()
-
 					// DEBUG: Injecting an event for testing while developing.
 					p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
 				}()
