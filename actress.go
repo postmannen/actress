@@ -13,6 +13,7 @@ type processes struct {
 	mu      sync.Mutex
 }
 
+// Add a new Event and it's process to the processes map.
 func (p *processes) add(et EventType, proc *Process) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -24,14 +25,15 @@ func (p *processes) add(et EventType, proc *Process) {
 	p.procMap[et] = proc
 }
 
-func (p *processes) delete(et EventType, proc *Process) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.procMap[et].cancel()
-	delete(p.procMap, et)
-}
+// // Delete an Event and it's process from the processes map.
+// func (p *processes) delete(et EventType, proc *Process) {
+// 	p.mu.Lock()
+// 	defer p.mu.Unlock()
+// 	p.procMap[et].cancel()
+// 	delete(p.procMap, et)
+// }
 
-// Checks if the event is defined in the map, and returns true if it is.
+// Checks if the event is defined in the processes map, and returns true if it is.
 func (p *processes) IsEventDefined(ev EventType) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -42,6 +44,7 @@ func (p *processes) IsEventDefined(ev EventType) bool {
 	return true
 }
 
+// Prepare and return a new *processes structure.
 func newProcesses() *processes {
 	p := processes{
 		procMap: make(map[EventType]*Process),
@@ -121,7 +124,7 @@ func (p *pids) next() pidnr {
 	return nr
 }
 
-// Process the essential parts of an process.
+// Process defines a process.
 type Process struct {
 	// Process function.
 	fn func()
@@ -178,8 +181,8 @@ func NewRootProcess(ctx context.Context) *Process {
 
 	p.PID = p.pids.nr
 
-	// Register all the standard child processes that should
-	// spawn off the root process
+	// Register and start all the standard child processes
+	// that should spawn off the root process
 	if p.Config.Profiling {
 		NewProcess(ctx, p, ETProfiling, etProfilingFn).Act()
 	}

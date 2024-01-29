@@ -40,32 +40,37 @@ import (
 //     for this to work. Check out the examples folder for a simple
 //     example for how it could be implemented.
 type Event struct {
-	// EventType eventType `json:"eventType" yaml:"eventType"`
+	// EventType is a unique name to identify the type of the event.
 	EventType EventType `json:"eventType" yaml:"eventType"`
-	Cmd       []string  `json:"cmd" yaml:"cmd"`
-	Data      []byte    `json:"data" yaml:"data"`
-	Err       error     `json:"error" yaml:"error"`
-	NextEvent *Event    `json:"event" yaml:"event"`
+	// Cmd is usually used for giving instructions or parameters for
+	// what an event shall do.
+	Cmd []string `json:"cmd" yaml:"cmd"`
+	// Data usually carries the data from one process to the next. Example
+	// could be a file read on process1 is put in the Data field, and
+	// passed on to process2 to be unmarshaled.
+	Data []byte `json:"data" yaml:"data"`
+	// Err is used for defining the error message when the event is used
+	// as an error event.
+	Err error `json:"error" yaml:"error"`
+	// NextEvent defines a series of events to be executed like a workflow.
+	// The receiving process should check this field for what kind of event
+	// to create as the next step in the workflow.
+	NextEvent *Event `json:"event" yaml:"event"`
 }
 
+// EventType is a unique name used to identify events. It is used both for
+// creating processes and also for routing messages to the correct process.
 type EventType string
 
-// Event types
-// For the main Root process.
+// The main Root process.
 const ETRoot EventType = "ETRoot"
 
+// Function type describing the signature of a function that is to be used
+// when creating a new process.
 type ETFunc func(context.Context, *Process) func()
 
 // -----------------------------------------------------------------------------
-// Startup processes function
-// -----------------------------------------------------------------------------
-
-// Process function used to startup all the other needed processes.
-// This process will only be assigned to the root process in the
-// newProcess function.
-
-// -----------------------------------------------------------------------------
-// Builtin standard functions
+// Builtin standard EventType's and theit ETfunc's.
 // -----------------------------------------------------------------------------
 
 // Router for normal events.
@@ -265,10 +270,6 @@ func etExitFn(ctx context.Context, p *Process) func() {
 
 	return fn
 }
-
-// -----------------------------------------------------------------------------
-// Error handling functions
-// -----------------------------------------------------------------------------
 
 // Router for error events.
 const ERRouter EventType = "ERRouter"
@@ -522,6 +523,11 @@ type customEvent struct {
 	Cmd  []string
 }
 
+// ETCustomEvent are used when reading custom user defined events
+// to create processes from disk. It expects it's input in the Data
+// field of the event to be the JSON serialized data of a custom Event.
+// The unmarshaled custom event will then be used to prepare and start
+// up a process for the new EventType.
 const ETCustomEvent EventType = "ETCustomEvent"
 
 func ETCustomEventFn(ctx context.Context, p *Process) func() {

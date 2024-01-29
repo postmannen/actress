@@ -8,11 +8,34 @@ A process are like a module capable of performing a specific tasks. The nature o
 
 ## Events
 
-To initiate a task and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as communication channels within the system. They can carry data, either as a result of something the previous process did, instructions for what a process should do, or both. An event can contain a chain of events to create workflows of what do do and in what order by using the NextEvent feature (see example).
+To initiate a task and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as communication channels within the system. They can carry data, either as a result of something the previous process did, instructions for what a process should do, or both. An event can contain a chain of events to create workflows of what do do and in what order by using the NextEvent feature (see examples for usage).
+
+```Go
+type Event struct {
+    // EventType is a unique name to identify the type of the event.
+    EventType EventType 
+    // Cmd is usually used for giving instructions or parameters for
+    // what an event shall do.
+    Cmd       []string
+    // Data usually carries the data from one process to the next. Example
+    // could be a file read on process1 is put in the Data field, and
+    // passed on to process2 to be unmarshaled.
+    Data      []byte
+    // Err is used for defining the error message when the event is used
+    // as an error event.
+    Err       error
+    // NextEvent defines a series of events to be executed like a workflow.
+    // The receiving process should check this field for what kind of event
+    // to create as the next step in the workflow.    
+    NextEvent *Event 
+}
+```
 
 ## Event Functions
 
-Event Functions holds the logic for what to do when an event is received, and what to do with the data it holds.
+Event Functions holds the logic for what to do when an event is received, and what to do with the data the event holds. The Event functions are callback functions that are executed when a process are created.
+
+For an event function to continously work on on events it should hold a for loop that listens on the Process InCh for new Events.
 
 ## Examples
 
@@ -42,7 +65,7 @@ func main() {
     // Create a test channel where we receive the end result.
     testCh := make(chan string)
 
-    // Define two event typess for two processes.
+    // Define two event types for two processes.
     const ETTest1 actress.EventType = "ETTest1"
     const ETTest2 actress.EventType = "ETTest2"
 
