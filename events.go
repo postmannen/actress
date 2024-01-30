@@ -107,6 +107,8 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 							p.Processes.mu.Lock()
 							p.Processes.procMap[e.EventType].InCh <- e
 							p.Processes.mu.Unlock()
+
+							return
 						}
 
 					}(e)
@@ -614,7 +616,7 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 
 					NewProcess(ctx, *p, EventType(ce.Name), WrapperCustomCmd(ce.Cmd)).Act()
 					// DEBUG: Injecting an event for testing while developing.
-					p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
+					// p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
 				}()
 			case <-ctx.Done():
 				return
@@ -641,6 +643,7 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 				d := <-p.InCh
 
 				go func() {
+					fmt.Printf("********* start of event: %v, cmd: %v\n", d.EventType, d.Cmd)
 					//ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(5))
 					ctx, cancel := context.WithCancel(ctx)
 					defer cancel()
@@ -676,7 +679,7 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 						}
 					}()
 
-					<-ctx.Done()
+					//<-ctx.Done()
 
 					err = cmd.Wait()
 					if err != nil {
@@ -684,7 +687,7 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 					}
 
 					//p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
-					fmt.Println("**************************************************")
+					fmt.Printf("********* End of event: %v, cmd: %v\n", d.EventType, d.Cmd)
 
 				}()
 			}
