@@ -1,6 +1,7 @@
 package actress
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -97,7 +98,7 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 
 							if !ok {
 								p.AddError(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
-								time.Sleep(time.Millisecond * 500)
+								time.Sleep(time.Millisecond * 1000)
 								continue
 							}
 
@@ -640,7 +641,8 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 				d := <-p.InCh
 
 				go func() {
-					ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(5))
+					//ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(5))
+					ctx, cancel := context.WithCancel(ctx)
 					defer cancel()
 
 					// The command is located in the first field of the string slice.
@@ -650,18 +652,39 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 					args = append(args, d.Cmd...)
 
 					cmd := exec.CommandContext(ctx, command[0], args...)
-					var outText bytes.Buffer
-					var errText bytes.Buffer
-					cmd.Stdout = &outText
-					cmd.Stderr = &errText
-					cmd.WaitDelay = time.Second * 5
 
-					err := cmd.Run()
+					outReader, _ := cmd.StdoutPipe()
+					errReader, _ := cmd.StderrPipe()
+					//cmd.WaitDelay = time.Second * 5
+
+					err := cmd.Start()
 					if err != nil {
-						p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, errText.String())})
+						p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, err.Error())})
 					}
 
-					p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
+					go func() {
+						scanner := bufio.NewScanner(outReader)
+						for scanner.Scan() {
+							fmt.Printf("%v\n", scanner.Text())
+						}
+					}()
+
+					go func() {
+						scanner := bufio.NewScanner(errReader)
+						for scanner.Scan() {
+							fmt.Printf("%v\n", scanner.Text())
+						}
+					}()
+
+					<-ctx.Done()
+
+					err = cmd.Wait()
+					if err != nil {
+						p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to wait for command, err: %v, errText: %v", err, err.Error())})
+					}
+
+					//p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
+					fmt.Println("**************************************************")
 
 				}()
 			}
