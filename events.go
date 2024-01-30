@@ -2,7 +2,6 @@ package actress
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -748,28 +747,64 @@ const ETOsCmd EventType = "etOsCmd"
 func etOsCmdFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
-			d := <-p.InCh
+			ev := <-p.InCh
 
-			go func() {
-				ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(5))
+			go func(ev Event) {
+				fmt.Printf("********* start of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
+				//ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(5))
+				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
 
-				args := d.Cmd[1:]
-				cmd := exec.CommandContext(ctx, d.Cmd[0], args...)
-				var outText bytes.Buffer
-				var errText bytes.Buffer
-				cmd.Stdout = &outText
-				cmd.Stderr = &errText
-				cmd.WaitDelay = time.Second * 5
+				// The command is located in the first field of the string slice.
+				// The rest of the arguments are in the remaining fields of the slice.
+				args := ev.Cmd[1:]
+				// Append the values of d.Cmd to the already existing values in args.
+				args = append(args, ev.Cmd...)
 
-				err := cmd.Run()
+				cmd := exec.CommandContext(ctx, ev.Cmd[0], args...)
+
+				outReader, _ := cmd.StdoutPipe()
+				errReader, _ := cmd.StderrPipe()
+				//cmd.WaitDelay = time.Second * 5
+
+				err := cmd.Start()
 				if err != nil {
-					p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, errText.String())})
+					p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, err.Error())})
 				}
 
-				p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
+				go func() {
+					scanner := bufio.NewScanner(outReader)
+					for scanner.Scan() {
+						if ev.NextEvent == nil {
+							fmt.Printf("%v\n", scanner.Text())
+							continue
+						}
+						p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
+					}
+				}()
 
-			}()
+				go func() {
+					scanner := bufio.NewScanner(errReader)
+					for scanner.Scan() {
+						if ev.NextEvent == nil {
+							fmt.Printf("%v\n", scanner.Text())
+							continue
+						}
+						p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
+					}
+				}()
+
+				//<-ctx.Done()
+
+				err = cmd.Wait()
+				if err != nil {
+					p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to wait for command, err: %v, errText: %v", err, err.Error())})
+				}
+
+				//p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
+				fmt.Printf("********* End of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
+
+			}(ev)
 		}
 	}
 
