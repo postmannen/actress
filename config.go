@@ -7,9 +7,10 @@ import (
 )
 
 type Config struct {
-	Profiling    string
-	CustomEvents bool
-	Metrics      bool
+	Profiling        string
+	CustomEvents     bool
+	Metrics          bool
+	CustomEventsPath string
 }
 
 // New config will check flags and env variables set, and prepare
@@ -17,14 +18,16 @@ type Config struct {
 func NewConfig() *Config {
 	// The config with default values set.
 	c := Config{
-		Profiling:    "none",
-		CustomEvents: false,
-		Metrics:      false,
+		Profiling:        "none",
+		CustomEvents:     false,
+		Metrics:          false,
+		CustomEventsPath: "customevents",
 	}
 
 	c.Profiling = CheckEnv("PROFILING", c.Profiling).(string)
 	c.CustomEvents = CheckEnv("CUSTOMEVENTS", c.CustomEvents).(bool)
 	c.Metrics = CheckEnv("METRICS", c.Metrics).(bool)
+	c.CustomEventsPath = CheckEnv("CUSTOMEVENTSPATH", c.CustomEventsPath).(string)
 
 	return &c
 }
