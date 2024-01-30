@@ -668,14 +668,22 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 					go func() {
 						scanner := bufio.NewScanner(outReader)
 						for scanner.Scan() {
-							fmt.Printf("%v\n", scanner.Text())
+							if ev.NextEvent == nil {
+								fmt.Printf("%v\n", scanner.Text())
+								continue
+							}
+							p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
 						}
 					}()
 
 					go func() {
 						scanner := bufio.NewScanner(errReader)
 						for scanner.Scan() {
-							fmt.Printf("%v\n", scanner.Text())
+							if ev.NextEvent == nil {
+								fmt.Printf("%v\n", scanner.Text())
+								continue
+							}
+							p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
 						}
 					}()
 
