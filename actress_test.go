@@ -3,6 +3,8 @@ package actress
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"log"
 	"testing"
 )
 
@@ -164,6 +166,7 @@ func TestPidToProcMap(t *testing.T) {
 // -------------------------------------------------------------
 
 func BenchmarkSingleProcess(b *testing.B) {
+	log.SetOutput(io.Discard)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -202,6 +205,7 @@ func BenchmarkSingleProcess(b *testing.B) {
 }
 
 func BenchmarkTwoProcesses(b *testing.B) {
+	log.SetOutput(io.Discard)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -262,6 +266,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 }
 
 func BenchmarkThreeProcesses(b *testing.B) {
+	log.SetOutput(io.Discard)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
