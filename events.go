@@ -60,6 +60,37 @@ type Event struct {
 	NextEvent *Event `json:"event" yaml:"event"`
 }
 
+type EventOpt func(*Event)
+
+func NewEvent(et EventType, opts ...EventOpt) *Event {
+	ev := Event{EventType: et}
+	for _, opt := range opts {
+		opt(&ev)
+	}
+	return &ev
+}
+
+func EvCmd(cmd []string) EventOpt {
+	fn := func(ev *Event) {
+		ev.Cmd = cmd
+	}
+	return fn
+}
+
+func EVData(b []byte) EventOpt {
+	fn := func(ev *Event) {
+		ev.Data = b
+	}
+	return fn
+}
+
+func EvNext(nev *Event) EventOpt {
+	fn := func(ev *Event) {
+		ev.NextEvent = nev
+	}
+	return fn
+}
+
 // EventType is a unique name used to identify events. It is used both for
 // creating processes and also for routing messages to the correct process.
 type EventType string
