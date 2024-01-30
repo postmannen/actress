@@ -640,10 +640,10 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 	fønk := func(ctx context.Context, p *Process) func() {
 		fn := func() {
 			for {
-				d := <-p.InCh
+				ev := <-p.InCh
 
-				go func() {
-					fmt.Printf("********* start of event: %v, cmd: %v\n", d.EventType, d.Cmd)
+				go func(ev Event) {
+					fmt.Printf("********* start of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
 					//ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(5))
 					ctx, cancel := context.WithCancel(ctx)
 					defer cancel()
@@ -652,7 +652,7 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 					// The rest of the arguments are in the remaining fields of the slice.
 					args := command[1:]
 					// Append the values of d.Cmd to the already existing values in args.
-					args = append(args, d.Cmd...)
+					args = append(args, ev.Cmd...)
 
 					cmd := exec.CommandContext(ctx, command[0], args...)
 
@@ -687,9 +687,9 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 					}
 
 					//p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
-					fmt.Printf("********* End of event: %v, cmd: %v\n", d.EventType, d.Cmd)
+					fmt.Printf("********* End of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
 
-				}()
+				}(ev)
 			}
 		}
 
