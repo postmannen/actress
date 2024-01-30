@@ -183,9 +183,9 @@ func NewRootProcess(ctx context.Context) *Process {
 
 	// Register and start all the standard child processes
 	// that should spawn off the root process
-	if p.Config.Profiling {
-		NewProcess(ctx, p, ETProfiling, etProfilingFn).Act()
-	}
+
+	NewProcess(ctx, p, ETProfiling, etProfilingFn).Act()
+
 	if p.Config.CustomEvents {
 		NewProcess(ctx, p, ETCustomEvent, ETCustomEventFn).Act()
 	}

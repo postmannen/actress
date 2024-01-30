@@ -7,8 +7,9 @@ import (
 )
 
 type Config struct {
-	Profiling    bool
+	Profiling    string
 	CustomEvents bool
+	Metrics      bool
 }
 
 // New config will check flags and env variables set, and prepare
@@ -16,15 +17,14 @@ type Config struct {
 func NewConfig() *Config {
 	// The config with default values set.
 	c := Config{
-		Profiling:    false,
+		Profiling:    "none",
 		CustomEvents: false,
+		Metrics:      false,
 	}
 
-	c.Profiling = CheckEnv("PROFILING", c.Profiling).(bool)
+	c.Profiling = CheckEnv("PROFILING", c.Profiling).(string)
 	c.CustomEvents = CheckEnv("CUSTOMEVENTS", c.CustomEvents).(bool)
-
-	// flag.BoolVar(&c.profiling, "profiling", CheckEnv("PROFILING", c.profiling).(bool), "enable profiling")
-	// flag.Parse()
+	c.Metrics = CheckEnv("METRICS", c.Metrics).(bool)
 
 	return &c
 }
@@ -32,7 +32,6 @@ func NewConfig() *Config {
 // Check if an env variable is set. If found, return the value.
 // Takes the name of the env variable, and the actual variable
 // containing a default value as it's input.
-
 func CheckEnv[T any](key string, v T) any {
 	val, ok := os.LookupEnv(key)
 	if !ok {

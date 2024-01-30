@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -210,26 +211,42 @@ const ETProfiling EventType = "ETprofiling"
 
 func etProfilingFn(ctx context.Context, p *Process) func() {
 	fn := func() {
-		defer profile.Start(profile.MutexProfile).Stop()
-		//defer profile.Start(profile.BlockProfile).Stop()
-		//defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
-		//defer profile.Start(profile.TraceProfile, profile.ProfilePath(".")).Stop()
-		//defer profile.Start(profile.MemProfile, profile.MemProfileRate(1)).Stop()
-		//defer profile.Start(profile.MemProfileHeap).Stop()
-		//defer profile.Start(profile.MemProfileAllocs).Stop()
+		switch p.Config.Profiling {
+		case "mutex":
+			runtime.SetMutexProfileFraction(1)
+			defer profile.Start(profile.MutexProfile).Stop()
+		case "block":
+			runtime.SetBlockProfileRate(1)
+			defer profile.Start(profile.BlockProfile).Stop()
+		case "cpu":
+			defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
+		case "trace":
+			defer profile.Start(profile.TraceProfile, profile.ProfilePath(".")).Stop()
+		case "mem":
+			defer profile.Start(profile.MemProfile, profile.MemProfileRate(1)).Stop()
+		case "heap":
+			defer profile.Start(profile.MemProfileHeap).Stop()
+		case "alloc":
+			defer profile.Start(profile.MemProfileAllocs).Stop()
+		case "none":
+		}
 
-		go http.ListenAndServe("localhost:6060", nil)
+		if p.Config.Metrics || p.Config.Profiling != "" {
+			go http.ListenAndServe("localhost:6060", nil)
+		}
 
-		reg := prometheus.NewRegistry()
-		reg.MustRegister(collectors.NewGoCollector())
-		procTotal := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "ctrl_processes_total",
-			Help: "The current number of total running processes",
-		})
-		reg.MustRegister(procTotal)
+		if p.Config.Metrics {
+			reg := prometheus.NewRegistry()
+			reg.MustRegister(collectors.NewGoCollector())
+			procTotal := prometheus.NewGauge(prometheus.GaugeOpts{
+				Name: "ctrl_processes_total",
+				Help: "The current number of total running processes",
+			})
+			reg.MustRegister(procTotal)
 
-		http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-		//<-ctx.Done()
+			http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+			//<-ctx.Done()
+		}
 	}
 
 	return fn
