@@ -446,6 +446,28 @@ func erFatalFn(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// Log and exit system.
+const ERTest EventType = "ERTest"
+
+func erTestFn(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			select {
+			case er := <-p.InCh:
+
+				go func() {
+					drop := fmt.Sprintf("error for fatal logging received: %v\n", er.Err)
+					_ = drop
+				}()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	return fn
+}
+
 // Handling pids within the system.
 // The structure of the ev.Cmd is a slice of string:
 // []string{"action","pid","process name"}

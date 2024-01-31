@@ -207,6 +207,7 @@ func NewRootProcess(ctx context.Context) *Process {
 	NewProcess(ctx, p, ERLog, erLogFn).Act()
 	NewProcess(ctx, p, ERDebug, erDebugFn).Act()
 	NewProcess(ctx, p, ERFatal, erFatalFn).Act()
+	NewProcess(ctx, p, ERTest, erTestFn).Act()
 
 	return &p
 }
