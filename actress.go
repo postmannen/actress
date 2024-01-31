@@ -188,13 +188,13 @@ func NewRootProcess(ctx context.Context) *Process {
 
 	if p.Config.CustomEvents {
 		NewProcess(ctx, p, ETCustomEvent, ETCustomEventFn).Act()
+		NewProcess(ctx, p, ETWatchEventFile, wrapperETWatchEventFileFn(p.Config.CustomEventsPath, ".json")).Act()
 	}
 
 	NewProcess(ctx, p, ETRouter, etRouterFn).Act()
 	NewProcess(ctx, p, ETOsSignal, etOsSignalFn).Act()
 	NewProcess(ctx, p, ETTestCh, etTestChFn).Act()
 	NewProcess(ctx, p, ETPid, etPidFn).Act()
-	NewProcess(ctx, p, ETWatchEventFile, wrapperETWatchEventFileFn(p.Config.CustomEventsPath, ".json")).Act()
 	NewProcess(ctx, p, ETReadFile, ETReadFileFn).Act()
 	NewProcess(ctx, p, ETOsCmd, etOsCmdFn).Act()
 
