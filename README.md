@@ -2,11 +2,13 @@
 
 A Concurrent Actor framework written in Go.
 
-## Processes
+## Overview
+
+### Processes
 
 A process are like a module capable of performing a specific tasks. The nature of the process is determined by an EventType and a Function attached to each process. A process have an InCh for receiving events, and an AddEvent for sending Events. The processes can themselves spawn new processes. Processes can also send Event messages to other processes.
 
-## Events
+### Events
 
 To initiate a task and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as communication channels within the system. They can carry data, either as a result of something the previous process did, instructions for what a process should do, or both. An event can contain a chain of events to create workflows of what do do and in what order by using the NextEvent feature (see examples for usage).
 
@@ -31,17 +33,17 @@ type Event struct {
 }
 ```
 
-## Event Functions
+### Event Functions
 
 Event Functions holds the logic for what to do when an event is received, and what to do with the data the event holds. The Event functions are callback functions that are executed when a process are created.
 
 For an event function to continously work on on events it should hold a for loop that listens on the Process InCh for new Events.
 
-## Examples
+### Examples
 
 Check out the test files for examples for how to define an Event and it's Process function, or for more complete examples check out the [examples](examples/) folder.
 
-## Quick start
+### Quick start
 
 ```Go
 package main
@@ -130,4 +132,48 @@ func main() {
     time.Sleep(time.Second * 2)
     cancel()
 }
+```
+
+## Details
+
+### Custom Events Processes
+
+Custom Event Processes allows for dynimally adding new EventTypes and Processes at runtime. This feature is enabled by setting the `CUSTOMEVENTS` env variable to `true`, and also the path for where to look for configs with `CUSTOMEVENTSPATH`. The folder is continously being watched for changes, so any updates to config JSON files will be activated immediately. For adding custom event, put files in the `CUSTOMEVENTSPATH` with the extension `.json`. The files should be in the same format as an **Event**.
+
+```json
+{"Name":"ET1","Cmd":["/bin/bash","-c"]}
+```
+
+The example above will automatically create a Process that have an EventType of `ET1`. We can then send Events using `ET1` as the EventType, and what we put in Event.Cmd will be appended to the existing values that already exist in the Custom Event. Example follows.
+
+#### Custom Event Example 1
+
+We use the Custom Event from above, and add a new event using `ET1` like this:
+
+```go
+p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
+```
+
+When the Event is received at the ET1 process it's Cmd is appended what was defined earlier when creating the ET1 Process. The end result of the Cmd field will be `[]string{"/bin/bash","-c","ls -l"}` which is then executed.
+
+#### Custom Event Example 2
+
+We can also add the whole command to be executed in the `.json` file likes this.
+
+```json
+{"Name":"ETBleeping","Cmd":["/bin/bash","-c","curl -L https://bleepingcomputer.com"]}
+```
+
+Since this Event specification is complete in itself we don't have to use the Cmd field when adding an Event to use it.
+
+```go
+p.AddEvent(Event{EventType: EventType("ETBleeping")})
+```
+
+## NextEvent
+
+NextEvent makes it possible to define an event as a chain of Events. An example could be that we want to get the content of a web page, and print the result to the screen. We could do that in the following way.
+
+```go
+p.AddEvent(Event{EventType: EventType("ETBleeping"), NextEvent: &Event{EventType: ETPrint}})
 ```

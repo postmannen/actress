@@ -35,13 +35,10 @@ func wrapperETNatsSubscriber(conn *nats.Conn) ac.ETFunc {
 				}
 				defer sub.Unsubscribe()
 				<-ctx.Done()
-
 			}()
-
 		}
 
 		return subFn
-
 	}
 
 	return fn
