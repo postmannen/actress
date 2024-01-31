@@ -237,6 +237,7 @@ func BenchmarkSingleProcessEventAndError(b *testing.B) {
 
 	for n := 0; n < b.N; n++ {
 		rootp.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
+		rootp.ErrorCh <- Event{EventType: ERTest, Err: fmt.Errorf("some error:%v", "apekatt")}
 		if r := <-testCh; r != "test" {
 			b.Fatalf("ETTest failed\n")
 		}

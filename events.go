@@ -363,9 +363,9 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 			case e := <-p.ErrorCh:
 
 				go func() {
-					p.Processes.mu.Lock()
-					p.Processes.procMap[e.EventType].InCh <- e
-					p.Processes.mu.Unlock()
+					p.ErrProcesses.mu.Lock()
+					p.ErrProcesses.procMap[e.EventType].InCh <- e
+					p.ErrProcesses.mu.Unlock()
 				}()
 
 			case <-ctx.Done():
