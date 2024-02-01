@@ -137,6 +137,8 @@ type Process struct {
 	Processes *processes
 	// Maps for various errProcess information
 	ErrProcesses *errProcesses
+	// Maps for various customProcess information
+	CustomProcesses *customProcesses
 	// Is this the root process.
 	isRoot bool
 	// Holding all configuration settings.
@@ -163,18 +165,19 @@ func NewRootProcess(ctx context.Context) *Process {
 	conf := NewConfig()
 
 	p := Process{
-		fn:           nil,
-		InCh:         make(chan Event),
-		EventCh:      make(chan Event),
-		ErrorCh:      make(chan Event),
-		TestCh:       make(chan Event, 1),
-		Event:        ETRoot,
-		Processes:    newProcesses(),
-		ErrProcesses: newErrProcesses(),
-		isRoot:       true,
-		Config:       conf,
-		pids:         newPids(),
-		cancel:       cancel,
+		fn:              nil,
+		InCh:            make(chan Event),
+		EventCh:         make(chan Event),
+		ErrorCh:         make(chan Event),
+		TestCh:          make(chan Event, 1),
+		Event:           ETRoot,
+		Processes:       newProcesses(),
+		ErrProcesses:    newErrProcesses(),
+		CustomProcesses: newCustomProcesses(),
+		isRoot:          true,
+		Config:          conf,
+		pids:            newPids(),
+		cancel:          cancel,
 	}
 
 	p.PID = p.pids.nr
@@ -215,19 +218,20 @@ func NewRootProcess(ctx context.Context) *Process {
 func NewProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc) *Process {
 	ctx, cancel := context.WithCancel(ctx)
 	p := Process{
-		fn:           nil,
-		InCh:         make(chan Event),
-		EventCh:      parentP.EventCh,
-		ErrorCh:      parentP.ErrorCh,
-		TestCh:       parentP.TestCh,
-		Event:        event,
-		Processes:    parentP.Processes,
-		ErrProcesses: parentP.ErrProcesses,
-		isRoot:       false,
-		Config:       parentP.Config,
-		pids:         parentP.pids,
-		PID:          parentP.pids.next(),
-		cancel:       cancel,
+		fn:              nil,
+		InCh:            make(chan Event),
+		EventCh:         parentP.EventCh,
+		ErrorCh:         parentP.ErrorCh,
+		TestCh:          parentP.TestCh,
+		Event:           event,
+		Processes:       parentP.Processes,
+		ErrProcesses:    parentP.ErrProcesses,
+		CustomProcesses: parentP.CustomProcesses,
+		isRoot:          false,
+		Config:          parentP.Config,
+		pids:            parentP.pids,
+		PID:             parentP.pids.next(),
+		cancel:          cancel,
 	}
 
 	p.Processes.add(event, &p)

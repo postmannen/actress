@@ -656,7 +656,7 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 						log.Fatalf("failed to unmarshal custom event data: %v\n", err)
 					}
 
-					NewProcess(ctx, *p, EventType(ce.Name), WrapperCustomCmd(ce.Cmd)).Act()
+					NewCustomProcess(ctx, *p, EventType(ce.Name), WrapperCustomCmd(ce.Cmd)).Act()
 					// DEBUG: Injecting an event for testing while developing.
 					// p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
 				}()

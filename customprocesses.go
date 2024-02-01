@@ -7,12 +7,12 @@ import (
 // processes holds information about what process functions
 // who belongs to what event, and also a map of the started
 // processes.
-type errProcesses struct {
+type customProcesses struct {
 	procMap map[EventType]*Process
 }
 
 // Add a new Event and it's process to the processes map.
-func (p *errProcesses) add(et EventType, proc *Process) {
+func (p *customProcesses) add(et EventType, proc *Process) {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
 	if _, ok := p.procMap[et]; ok {
@@ -30,7 +30,7 @@ func (p *errProcesses) add(et EventType, proc *Process) {
 // }
 
 // Checks if the event is defined in the processes map, and returns true if it is.
-func (p *errProcesses) IsEventDefined(ev EventType) bool {
+func (p *customProcesses) IsEventDefined(ev EventType) bool {
 	if _, ok := p.procMap[ev]; !ok {
 		return false
 	}
@@ -39,16 +39,16 @@ func (p *errProcesses) IsEventDefined(ev EventType) bool {
 }
 
 // Prepare and return a new *processes structure.
-func newErrProcesses() *errProcesses {
-	p := errProcesses{
+func newCustomProcesses() *customProcesses {
+	p := customProcesses{
 		procMap: make(map[EventType]*Process),
 	}
 	return &p
 }
 
-// NewErrProcess will prepare and return a *Process. It will copy
+// NewCustomProcess will prepare and return a *Process. It will copy
 // channels and map structures from the root process.
-func NewErrProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc) *Process {
+func NewCustomProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc) *Process {
 	ctx, cancel := context.WithCancel(ctx)
 	p := Process{
 		fn:              nil,
@@ -67,7 +67,7 @@ func NewErrProcess(ctx context.Context, parentP Process, event EventType, fn ETF
 		cancel:          cancel,
 	}
 
-	p.ErrProcesses.add(event, &p)
+	p.CustomProcesses.add(event, &p)
 
 	if fn != nil {
 		p.fn = fn(ctx, &p)
