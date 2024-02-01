@@ -55,6 +55,7 @@ func NewErrProcess(ctx context.Context, parentP Process, event EventType, fn ETF
 		InCh:            make(chan Event),
 		EventCh:         parentP.EventCh,
 		ErrorCh:         parentP.ErrorCh,
+		CustomCh:        parentP.CustomCh,
 		TestCh:          parentP.TestCh,
 		Event:           event,
 		Processes:       parentP.Processes,

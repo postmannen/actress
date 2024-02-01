@@ -521,28 +521,29 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 			}
 			defer watcher.Close()
 
+			// Before we start the watcher we want to check and handle the files
+			// that already are present in the directory.
+			err = filepath.Walk(path,
+				func(pth string, info os.FileInfo, err error) error {
+					if err != nil {
+						return err
+					}
+
+					// Check if the extension of the file is correct.
+					ext := filepath.Ext(pth)
+					if ext == extension {
+						p.AddEvent(Event{EventType: ETReadFile, Cmd: []string{pth},
+							NextEvent: &Event{EventType: ETCustomEvent}})
+					}
+
+					return nil
+				})
+			if err != nil {
+				log.Fatalf("filepath Walk failed: %v\n", err)
+			}
+
 			// Start listening for events.
 			go func() {
-				// Before we start the watcher we want to check and handle the files
-				// that already are present in the directory.
-				err := filepath.Walk(path,
-					func(pth string, info os.FileInfo, err error) error {
-						if err != nil {
-							return err
-						}
-
-						// Check if the extension of the file is correct.
-						ext := filepath.Ext(pth)
-						if ext == extension {
-							p.AddEvent(Event{EventType: ETReadFile, Cmd: []string{pth},
-								NextEvent: &Event{EventType: ETCustomEvent}})
-						}
-
-						return nil
-					})
-				if err != nil {
-					log.Fatalf("filepath Walk failed: %v\n", err)
-				}
 
 				for {
 					select {
@@ -606,7 +607,6 @@ func ETReadFileFn(ctx context.Context, p *Process) func() {
 		for {
 			select {
 			case ev := <-p.InCh:
-
 				go func() {
 					fh, err := os.Open(ev.Cmd[0])
 					if err != nil {
@@ -817,6 +817,61 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 				fmt.Printf("********* End of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
 
 			}(ev)
+		}
+	}
+
+	return fn
+}
+
+// ---------------------------------------------
+
+// Router for custom events.
+const ECRouter EventType = "ECRouter"
+
+// Process function for routing and handling events.
+func ecRouterFn(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			select {
+			case e := <-p.CustomCh:
+				// Custom processes can take a little longer to start up and be
+				// registered in the map. We check here if process is registred,
+				// and it it is not we retry.
+				if _, ok := p.CustomProcesses.procMap[e.EventType]; !ok {
+					go func(ev Event) {
+						// Try to 3 times to deliver the message.
+						for i := 0; i < 3; i++ {
+							_, ok := p.CustomProcesses.procMap[e.EventType]
+
+							if !ok {
+								p.AddError(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
+								time.Sleep(time.Millisecond * 1000)
+								continue
+							}
+
+							// Process is now registred, so we can safely put
+							//the event on the InCh of the process.
+							p.CustomProcesses.procMap[e.EventType].InCh <- e
+
+							return
+						}
+
+					}(e)
+					continue
+				}
+
+				// Process was registered. Deliver the event to the process InCh.
+				p.CustomProcesses.procMap[e.EventType].InCh <- e
+
+			case <-ctx.Done():
+				// NB: Bevare of this one getting stuck if for example the error
+				// handling is down. Maybe add a timeout if blocking to long,
+				// and then send elsewhere if it becomes a problem.
+				p.AddError(Event{
+					EventType: ERLog,
+					Err:       fmt.Errorf("info: got ctx.Done"),
+				})
+			}
 		}
 	}
 

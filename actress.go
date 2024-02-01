@@ -129,6 +129,8 @@ type Process struct {
 	EventCh chan Event `json:"-"`
 	// Channel to send error events.
 	ErrorCh chan Event `json:"-"`
+	// Channel to send custom events.
+	CustomCh chan Event `json:"-"`
 	// Channel for getting the result in tests.
 	TestCh chan Event `json:"-"`
 	// The event type for the process.
@@ -169,6 +171,7 @@ func NewRootProcess(ctx context.Context) *Process {
 		InCh:            make(chan Event),
 		EventCh:         make(chan Event),
 		ErrorCh:         make(chan Event),
+		CustomCh:        make(chan Event),
 		TestCh:          make(chan Event, 1),
 		Event:           ETRoot,
 		Processes:       newProcesses(),
@@ -210,6 +213,8 @@ func NewRootProcess(ctx context.Context) *Process {
 	NewErrProcess(ctx, p, ERFatal, erFatalFn).Act()
 	NewErrProcess(ctx, p, ERTest, erTestFn).Act()
 
+	NewCustomProcess(ctx, p, ECRouter, ecRouterFn).Act()
+
 	return &p
 }
 
@@ -222,6 +227,7 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc
 		InCh:            make(chan Event),
 		EventCh:         parentP.EventCh,
 		ErrorCh:         parentP.ErrorCh,
+		CustomCh:        parentP.CustomCh,
 		TestCh:          parentP.TestCh,
 		Event:           event,
 		Processes:       parentP.Processes,
@@ -250,6 +256,11 @@ func (p *Process) AddEvent(event Event) {
 // Will add an error to be handled by the error processes.
 func (p *Process) AddError(event Event) {
 	p.ErrorCh <- event
+}
+
+// Will add a custom event to be handled by the processes.
+func (p *Process) AddCustomEvent(event Event) {
+	p.CustomCh <- event
 }
 
 // Will start the current process.

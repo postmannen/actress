@@ -2,6 +2,7 @@ package actress
 
 import (
 	"context"
+	"sync"
 )
 
 // processes holds information about what process functions
@@ -9,12 +10,15 @@ import (
 // processes.
 type customProcesses struct {
 	procMap map[EventType]*Process
+	mu      sync.Mutex
 }
 
 // Add a new Event and it's process to the processes map.
 func (p *customProcesses) add(et EventType, proc *Process) {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if _, ok := p.procMap[et]; ok {
 		p.procMap[et].cancel()
 	}
@@ -31,6 +35,8 @@ func (p *customProcesses) add(et EventType, proc *Process) {
 
 // Checks if the event is defined in the processes map, and returns true if it is.
 func (p *customProcesses) IsEventDefined(ev EventType) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if _, ok := p.procMap[ev]; !ok {
 		return false
 	}
@@ -55,6 +61,7 @@ func NewCustomProcess(ctx context.Context, parentP Process, event EventType, fn 
 		InCh:            make(chan Event),
 		EventCh:         parentP.EventCh,
 		ErrorCh:         parentP.ErrorCh,
+		CustomCh:        parentP.CustomCh,
 		TestCh:          parentP.TestCh,
 		Event:           event,
 		Processes:       parentP.Processes,
