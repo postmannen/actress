@@ -228,15 +228,49 @@ func BenchmarkSingleProcessEventAndError(b *testing.B) {
 		return fn
 	}
 
+	const ETGen EventType = "ETGen"
+
+	genFunc := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			go func() {
+				for {
+					p.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
+					p.ErrorCh <- Event{EventType: ERTest, Err: fmt.Errorf("some error:%v", "apekatt")}
+				}
+			}()
+			go func() {
+				for {
+					p.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
+					p.ErrorCh <- Event{EventType: ERTest, Err: fmt.Errorf("some error:%v", "apekatt")}
+				}
+			}()
+			go func() {
+				for {
+					p.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
+					p.ErrorCh <- Event{EventType: ERTest, Err: fmt.Errorf("some error:%v", "apekatt")}
+				}
+			}()
+			go func() {
+				for {
+					p.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
+					p.ErrorCh <- Event{EventType: ERTest, Err: fmt.Errorf("some error:%v", "apekatt")}
+				}
+			}()
+			<-ctx.Done()
+		}
+
+		return fn
+	}
+
 	rootp := NewRootProcess(ctx)
 	err := rootp.Act()
 	if err != nil {
 		b.Fatal(err)
 	}
 	NewProcess(ctx, *rootp, ETTest, tFunc).Act()
+	NewProcess(ctx, *rootp, ETGen, genFunc).Act()
 
 	for n := 0; n < b.N; n++ {
-		rootp.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
 		if r := <-testCh; r != "test" {
 			b.Fatalf("ETTest failed\n")
 		}
