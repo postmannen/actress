@@ -122,9 +122,7 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 					go func(ev Event) {
 						// Try to 3 times to deliver the message.
 						for i := 0; i < 3; i++ {
-							p.Processes.mu.Lock()
 							_, ok := p.Processes.procMap[e.EventType]
-							p.Processes.mu.Unlock()
 
 							if !ok {
 								p.AddError(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
@@ -134,9 +132,7 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 
 							// Process is now registred, so we can safely put
 							//the event on the InCh of the process.
-							p.Processes.mu.Lock()
 							p.Processes.procMap[e.EventType].InCh <- e
-							p.Processes.mu.Unlock()
 
 							return
 						}
@@ -146,9 +142,7 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 				}
 
 				// Process was registered. Deliver the event to the process InCh.
-				p.Processes.mu.Lock()
 				p.Processes.procMap[e.EventType].InCh <- e
-				p.Processes.mu.Unlock()
 
 			case <-ctx.Done():
 				p.AddError(Event{
@@ -362,11 +356,7 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 			select {
 			case e := <-p.ErrorCh:
 
-				go func() {
-					p.ErrProcesses.mu.Lock()
-					p.ErrProcesses.procMap[e.EventType].InCh <- e
-					p.ErrProcesses.mu.Unlock()
-				}()
+				p.ErrProcesses.procMap[e.EventType].InCh <- e
 
 			case <-ctx.Done():
 				// NB: Bevare of this one getting stuck if for example the error

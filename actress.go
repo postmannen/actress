@@ -10,13 +10,10 @@ import (
 // processes.
 type processes struct {
 	procMap map[EventType]*Process
-	mu      sync.Mutex
 }
 
 // Add a new Event and it's process to the processes map.
 func (p *processes) add(et EventType, proc *Process) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
 	if _, ok := p.procMap[et]; ok {
@@ -35,8 +32,6 @@ func (p *processes) add(et EventType, proc *Process) {
 
 // Checks if the event is defined in the processes map, and returns true if it is.
 func (p *processes) IsEventDefined(ev EventType) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	if _, ok := p.procMap[ev]; !ok {
 		return false
 	}
