@@ -25,7 +25,7 @@ func etNatsClientFunc(ctx context.Context, p *ac.Process) func() {
 			nats.MaxReconnects(-1),
 		)
 		if err != nil {
-			p.AddError(ac.Event{EventType: ac.ERFatal, Err: fmt.Errorf("error: nats.Connect failed, %vn", err)})
+			p.AddErr(ac.Event{EventType: ac.ERFatal, Err: fmt.Errorf("error: nats.Connect failed, %vn", err)})
 
 		}
 		defer conn.Close()
@@ -35,13 +35,13 @@ func etNatsClientFunc(ctx context.Context, p *ac.Process) func() {
 				// Subscribe for new incomming messages
 				go func() {
 					sub, err := conn.QueueSubscribe(NatsSubject, NatsSubject, func(msg *nats.Msg) {
-						p.AddEvent(ac.Event{
+						p.AddStd(ac.Event{
 							EventType: ac.ETPrint,
 							Data:      []byte(fmt.Sprintf("* nats: got message on subject %v, payload: %v", msg.Subject, string(msg.Data))),
 						})
 					})
 					if err != nil {
-						p.AddError(ac.Event{Err: fmt.Errorf("error: failed to nats.QueueSubscribe: %v", err)})
+						p.AddErr(ac.Event{Err: fmt.Errorf("error: failed to nats.QueueSubscribe: %v", err)})
 					}
 					defer sub.Unsubscribe()
 					<-ctx.Done()
@@ -63,7 +63,7 @@ func etNatsClientFunc(ctx context.Context, p *ac.Process) func() {
 							//fmt.Printf("********* GOT EVENT: %v\n", ev)
 							err := conn.Publish(ev.Cmd[0], ev.Data)
 							if err != nil {
-								p.AddError(ac.Event{EventType: ac.ERFatal, Err: fmt.Errorf("error: failed to nats.Publish: %v", err)})
+								p.AddErr(ac.Event{EventType: ac.ERFatal, Err: fmt.Errorf("error: failed to nats.Publish: %v", err)})
 							}
 						}()
 					case <-ctx.Done():
@@ -95,7 +95,7 @@ func main() {
 	}
 
 	// Start up a Nats-server using the ETOsCmd EventType.
-	rootAct.AddEvent(ac.Event{
+	rootAct.AddStd(ac.Event{
 		EventType: ac.ETOsCmd,
 		Cmd:       []string{"/bin/bash", "-c", "docker run --rm -p 4222:4222 -i nats:latest"},
 		NextEvent: &ac.Event{EventType: ac.ETPrint}})
@@ -112,7 +112,7 @@ func main() {
 	// Loop and send Events to the new Nats Client process.
 	var nr int
 	for {
-		rootAct.AddEvent(ac.Event{
+		rootAct.AddStd(ac.Event{
 			EventType: ETNatsPub,
 			Cmd:       []string{NatsSubject},
 			Data:      []byte(fmt.Sprintf("some data that was put in here: %v", nr)),

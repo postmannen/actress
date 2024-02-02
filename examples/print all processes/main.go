@@ -23,7 +23,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	rootAct.AddEvent(actress.Event{EventType: actress.ETPidGetAll,
+	rootAct.AddStd(actress.Event{EventType: actress.ETPidGetAll,
 		NextEvent: &actress.Event{
 			EventType: actress.ETTestCh},
 	},

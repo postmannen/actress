@@ -125,7 +125,7 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 							_, ok := p.Processes.procMap[e.EventType]
 
 							if !ok {
-								p.AddError(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
+								p.AddErr(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
 								time.Sleep(time.Millisecond * 1000)
 								continue
 							}
@@ -145,7 +145,7 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 				p.Processes.procMap[e.EventType].InCh <- e
 
 			case <-ctx.Done():
-				p.AddError(Event{
+				p.AddErr(Event{
 					EventType: ERLog,
 					Err:       fmt.Errorf("info: got ctx.Done"),
 				})
@@ -189,7 +189,7 @@ func etTestChFn(ctx context.Context, p *Process) func() {
 				p.TestCh <- e
 
 			case <-ctx.Done():
-				p.AddError(Event{
+				p.AddErr(Event{
 					EventType: ERLog,
 					Err:       fmt.Errorf("info: got ctx.Done"),
 				})
@@ -217,10 +217,10 @@ func etPidGetAllFn(ctx context.Context, p *Process) func() {
 				if err != nil {
 					log.Fatalf("error: failed to marshal pid to proc map: %v\n", err)
 				}
-				p.AddEvent(Event{EventType: e.NextEvent.EventType, Data: b})
+				p.AddStd(Event{EventType: e.NextEvent.EventType, Data: b})
 
 			case <-ctx.Done():
-				p.AddError(Event{
+				p.AddErr(Event{
 					EventType: ERLog,
 					Err:       fmt.Errorf("info: got ctx.Done"),
 				})
@@ -290,7 +290,7 @@ func etDoneFn(ctx context.Context, p *Process) func() {
 
 			go func() {
 				fmt.Printf("info: got event ETDone: %v\n", string(d.Data))
-				p.AddError(Event{
+				p.AddErr(Event{
 					EventType: ERLog,
 					Err:       fmt.Errorf("info: got etDone"),
 				})
@@ -362,7 +362,7 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 				// NB: Bevare of this one getting stuck if for example the error
 				// handling is down. Maybe add a timeout if blocking to long,
 				// and then send elsewhere if it becomes a problem.
-				p.AddError(Event{
+				p.AddErr(Event{
 					EventType: ERLog,
 					Err:       fmt.Errorf("info: got ctx.Done"),
 				})
@@ -486,13 +486,13 @@ func etPidFn(ctx context.Context, p *Process) func() {
 				// Check the type of action we got.
 				switch action {
 				case pidGet:
-					p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
+					p.AddStd(Event{EventType: ev.NextEvent.EventType, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
 
 				case pidGetAll:
 					pidProcMap := p.pids.toProc.copyOfMap()
 					for pid, procName := range *pidProcMap {
 
-						p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
+						p.AddStd(Event{EventType: ev.NextEvent.EventType, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
 					}
 				}
 
@@ -532,7 +532,7 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 					// Check if the extension of the file is correct.
 					ext := filepath.Ext(pth)
 					if ext == extension {
-						p.AddEvent(Event{EventType: ETReadFile, Cmd: []string{pth},
+						p.AddStd(Event{EventType: ETReadFile, Cmd: []string{pth},
 							NextEvent: &Event{EventType: ETCustomEvent}})
 					}
 
@@ -559,7 +559,7 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 							//if ext == extension {
 							//	log.Printf("op: %v, file : %v, extension: %v\n", fsEvent.Op, fileName, ext)
 							//}
-							p.AddEvent(Event{EventType: ETReadFile, Cmd: []string{fsEvent.Name},
+							p.AddStd(Event{EventType: ETReadFile, Cmd: []string{fsEvent.Name},
 								NextEvent: &Event{EventType: ETCustomEvent}})
 						case fsEvent.Has(fsnotify.Remove):
 							fileName := filepath.Base(fsEvent.Name)
@@ -621,7 +621,7 @@ func ETReadFileFn(ctx context.Context, p *Process) func() {
 
 					nEv := ev.NextEvent
 					nEv.Data = b
-					p.AddEvent(*nEv)
+					p.AddStd(*nEv)
 				}()
 			case <-ctx.Done():
 				return
@@ -658,7 +658,7 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 
 					NewCustomProcess(ctx, *p, EventType(ce.Name), WrapperCustomCmd(ce.Cmd)).Act()
 					// DEBUG: Injecting an event for testing while developing.
-					// p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
+					// p.AddStd(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
 				}()
 			case <-ctx.Done():
 				return
@@ -704,7 +704,7 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 
 					err := cmd.Start()
 					if err != nil {
-						p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, err.Error())})
+						p.AddErr(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, err.Error())})
 					}
 
 					go func() {
@@ -714,7 +714,7 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 								fmt.Printf("%v\n", scanner.Text())
 								continue
 							}
-							p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
+							p.AddStd(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
 						}
 					}()
 
@@ -725,7 +725,7 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 								fmt.Printf("%v\n", scanner.Text())
 								continue
 							}
-							p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
+							p.AddStd(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
 						}
 					}()
 
@@ -733,10 +733,10 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 
 					err = cmd.Wait()
 					if err != nil {
-						p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to wait for command, err: %v, errText: %v", err, err.Error())})
+						p.AddErr(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to wait for command, err: %v, errText: %v", err, err.Error())})
 					}
 
-					//p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
+					//p.AddStd(Event{EventType: ETPrint, Data: outText.Bytes()})
 					fmt.Printf("********* End of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
 
 				}(ev)
@@ -781,7 +781,7 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 
 				err := cmd.Start()
 				if err != nil {
-					p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, err.Error())})
+					p.AddErr(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, err.Error())})
 				}
 
 				go func() {
@@ -791,7 +791,7 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 							fmt.Printf("%v\n", scanner.Text())
 							continue
 						}
-						p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
+						p.AddStd(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
 					}
 				}()
 
@@ -802,7 +802,7 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 							fmt.Printf("%v\n", scanner.Text())
 							continue
 						}
-						p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
+						p.AddStd(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
 					}
 				}()
 
@@ -810,10 +810,10 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 
 				err = cmd.Wait()
 				if err != nil {
-					p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to wait for command, err: %v, errText: %v", err, err.Error())})
+					p.AddErr(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to wait for command, err: %v, errText: %v", err, err.Error())})
 				}
 
-				//p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
+				//p.AddStd(Event{EventType: ETPrint, Data: outText.Bytes()})
 				fmt.Printf("********* End of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
 
 			}(ev)
@@ -844,7 +844,7 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 							_, ok := p.CustomProcesses.procMap[e.EventType]
 
 							if !ok {
-								p.AddError(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
+								p.AddErr(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
 								time.Sleep(time.Millisecond * 1000)
 								continue
 							}
@@ -867,7 +867,7 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 				// NB: Bevare of this one getting stuck if for example the error
 				// handling is down. Maybe add a timeout if blocking to long,
 				// and then send elsewhere if it becomes a problem.
-				p.AddError(Event{
+				p.AddErr(Event{
 					EventType: ERLog,
 					Err:       fmt.Errorf("info: got ctx.Done"),
 				})

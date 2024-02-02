@@ -63,16 +63,16 @@ func (p *pidToProc) add(pid pidnr, proc *Process) {
 	p.mp[pid] = proc
 }
 
-// Get the *Process based on the pid.
-func (p *pidToProc) getProc(pid pidnr) *Process {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	proc, ok := p.mp[pid]
-	if !ok {
-		return nil
-	}
-	return proc
-}
+// // Get the *Process based on the pid.
+// func (p *pidToProc) getProc(pid pidnr) *Process {
+// 	p.mu.Lock()
+// 	defer p.mu.Unlock()
+// 	proc, ok := p.mp[pid]
+// 	if !ok {
+// 		return nil
+// 	}
+// 	return proc
+// }
 
 // Return a copy of the pid vs *Processes map.
 func (p *pidToProc) copyOfMap() *PidVsProcMap {
@@ -249,17 +249,17 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc
 }
 
 // Will add an event to be handled by the processes.
-func (p *Process) AddEvent(event Event) {
+func (p *Process) AddStd(event Event) {
 	p.EventCh <- event
 }
 
 // Will add an error to be handled by the error processes.
-func (p *Process) AddError(event Event) {
+func (p *Process) AddErr(event Event) {
 	p.ErrorCh <- event
 }
 
 // Will add a custom event to be handled by the processes.
-func (p *Process) AddCustomEvent(event Event) {
+func (p *Process) AddCust(event Event) {
 	p.CustomCh <- event
 }
 

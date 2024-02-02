@@ -42,7 +42,7 @@ func main() {
 							log.Fatalf("http body close failed: %v\n", err)
 						}
 
-						p.AddEvent(actress.Event{EventType: ETWriteToFile, Data: b})
+						p.AddStd(actress.Event{EventType: ETWriteToFile, Data: b})
 					}()
 
 				case <-ctx.Done():
@@ -85,7 +85,7 @@ func main() {
 	actress.NewProcess(ctx, *rootAct, ETWriteToFile, WriteToFileFunc).Act()
 	actress.NewProcess(ctx, *rootAct, ETHttpGet, httpGetFunc).Act()
 
-	rootAct.AddEvent(actress.Event{EventType: ETHttpGet, Cmd: []string{"http://vg.no"}})
+	rootAct.AddStd(actress.Event{EventType: ETHttpGet, Cmd: []string{"http://vg.no"}})
 	// Receive and print the result.
 
 	time.Sleep(time.Second * 2)

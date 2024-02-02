@@ -42,7 +42,7 @@ func main() {
 							log.Fatalf("http body close failed: %v\n", err)
 						}
 
-						p.AddEvent(actress.Event{EventType: ev.NextEvent.EventType, Data: b})
+						p.AddStd(actress.Event{EventType: ev.NextEvent.EventType, Data: b})
 					}()
 
 				case <-ctx.Done():
@@ -89,7 +89,7 @@ func main() {
 	// do a httpget first in the first process, then send the result
 	// off to the seconds process as a new event, and write the result
 	// to a file.
-	rootAct.AddEvent(actress.Event{
+	rootAct.AddStd(actress.Event{
 		EventType: ETHttpGet,
 		Cmd:       []string{"http://vg.no"},
 		NextEvent: &actress.Event{

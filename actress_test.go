@@ -38,7 +38,7 @@ func TestEventProcs(t *testing.T) {
 
 	NewProcess(ctx, *rootp, ETTest, tFunc).Act()
 
-	rootp.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
+	rootp.AddStd(Event{EventType: ETTest, Data: []byte("test")})
 	if r := <-testCh; r != "test" {
 		t.Fatalf("ETTest failed\n")
 	}
@@ -96,7 +96,7 @@ func TestNextEventProcs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rootp.AddEvent(Event{
+	rootp.AddStd(Event{
 		EventType: ETNextEvent,
 		Data:      []byte("test"),
 		NextEvent: &Event{EventType: ETTest}})
@@ -132,7 +132,7 @@ func TestPidToProcMap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rootp.AddEvent(Event{EventType: ETPidGetAll, NextEvent: &Event{EventType: ETTestCh}})
+	rootp.AddStd(Event{EventType: ETPidGetAll, NextEvent: &Event{EventType: ETTestCh}})
 
 	ev := <-rootp.TestCh
 	mapFromEv := make(PidVsProcMap)
@@ -196,7 +196,7 @@ func BenchmarkSingleProcess(b *testing.B) {
 	}
 
 	for n := 0; n < b.N; n++ {
-		rootp.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
+		rootp.AddStd(Event{EventType: ETTest, Data: []byte("test")})
 		if r := <-testCh; r != "test" {
 			b.Fatalf("ETTest failed\n")
 		}
@@ -236,7 +236,7 @@ func BenchmarkSingleProcessEventAndError(b *testing.B) {
 	NewProcess(ctx, *rootp, ETTest, tFunc).Act()
 
 	for n := 0; n < b.N; n++ {
-		rootp.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
+		rootp.AddStd(Event{EventType: ETTest, Data: []byte("test")})
 		rootp.ErrorCh <- Event{EventType: ERTest, Err: fmt.Errorf("some error:%v", "apekatt")}
 		if r := <-testCh; r != "test" {
 			b.Fatalf("ETTest failed\n")
@@ -298,7 +298,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 	}
 
 	for n := 0; n < b.N; n++ {
-		rootp.AddEvent(Event{EventType: ETTest1, Data: []byte("test")})
+		rootp.AddStd(Event{EventType: ETTest1, Data: []byte("test")})
 		if r := <-testCh; r != "test" {
 			b.Fatalf("ETTest failed\n")
 		}
@@ -376,7 +376,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 	}
 
 	for n := 0; n < b.N; n++ {
-		rootp.AddEvent(Event{EventType: ETTest1, Data: []byte("test")})
+		rootp.AddStd(Event{EventType: ETTest1, Data: []byte("test")})
 		if r := <-testCh; r != "test" {
 			b.Fatalf("ETTest failed\n")
 		}

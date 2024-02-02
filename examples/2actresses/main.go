@@ -32,7 +32,7 @@ func main() {
 					upper := strings.ToUpper(string(ev.Data))
 					// Pass on the processing to the next process, and use the NextEvent we have specified in main
 					// for the EventType, and add the result of ToUpper to the data field.
-					p.AddEvent(actress.Event{EventType: ev.NextEvent.EventType, Data: []byte(upper)})
+					p.AddStd(actress.Event{EventType: ev.NextEvent.EventType, Data: []byte(upper)})
 				case <-ctx.Done():
 					return
 				}
@@ -53,7 +53,7 @@ func main() {
 					testCh <- string(dots)
 
 					// Also create an informational error message.
-					p.AddError(actress.Event{EventType: actress.ERDebug, Err: fmt.Errorf("info: done with the acting")})
+					p.AddErr(actress.Event{EventType: actress.ERDebug, Err: fmt.Errorf("info: done with the acting")})
 
 				case <-ctx.Done():
 					return
@@ -76,7 +76,7 @@ func main() {
 	// Pass in an event destined for an ETTest1 EventType process, and also specify
 	// the next event to be used when passing the result on from ETTest1 to the next
 	// process which here is ETTest2.
-	rootAct.AddEvent(actress.Event{EventType: ETTest1, Data: []byte("test"), NextEvent: &actress.Event{EventType: ETTest2}})
+	rootAct.AddStd(actress.Event{EventType: ETTest1, Data: []byte("test"), NextEvent: &actress.Event{EventType: ETTest2}})
 
 	// Wait and receive the result from the ETTest2 process.
 	fmt.Printf("The result: %v\n", <-testCh)

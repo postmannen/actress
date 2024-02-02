@@ -77,7 +77,7 @@ func main() {
 	// Add and pass in an event that will be picked up by the actor
 	// registered for the ETTest1 EventType, and add "test" to the
 	// data field of the event.
-	rootAct.AddEvent(actress.Event{EventType: ETTest1, Data: []byte("test")})
+	rootAct.AddStd(actress.Event{EventType: ETTest1, Data: []byte("test")})
 	// Receive and print the result.
 	fmt.Printf("The result: %v\n", <-testCh)
 
