@@ -4,13 +4,17 @@ A Concurrent Actor framework written in Go.
 
 ## Overview
 
+Create custom processes where what the processes do are either your own piece of code, or it can be a command called from the Operating system. The processes can communicate by sending events to pass the result from one processes to the next for further processing. By chaining together process as workflows or powerful statemachines. or work together to provide some other service for the end user. The possibilities are many.
+
 ### Processes
 
 A process are like a module capable of performing a specific tasks. The nature of the process is determined by an EventType and a Function attached to each process. A process have an InCh for receiving events, and an AddEvent for sending Events. The processes can themselves spawn new processes. Processes can also send Event messages to other processes.
 
+A process can hold state within the Process Function.
+
 ### Events
 
-To initiate a task and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as communication channels within the system. They can carry data, either as a result of something the previous process did, instructions for what a process should do, or both. An event can contain a chain of events to create workflows of what do do and in what order by using the NextEvent feature (see examples for usage).
+To initiate and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as communication channels within the system. They can carry data, either with the result of something a process did to pass it on to the next process for further processing, instructions for what a process should do, or both. An event can contain a chain of events to create workflows of what do do and in what order by using the NextEvent feature (see examples for usage).
 
 ```Go
 type Event struct {
@@ -35,9 +39,9 @@ type Event struct {
 
 ### Event Functions
 
-Event Functions holds the logic for what to do when an event is received, and what to do with the data the event holds. The Event functions are callback functions that are executed when a process are created.
+Event Functions holds the logic for what to do when an event is received, and what to do with the data the event carries. The Event functions are callback functions that are executed when a process are created. 
 
-For an event function to continously work on on events it should hold a for loop that listens on the Process InCh for new Events.
+The programmer can decide if the Process Function should depend on the input from the input channel of the process, or just continously do some work on it's own. For an event function to be triggered to work on events it should hold a for loop that listens on the Process InCh for new Events.
 
 ### Examples
 
