@@ -4,7 +4,7 @@ A Concurrent Actor framework written in Go.
 
 ## Overview
 
-Create custom processes where what the processes do are either your own piece of code, or it can be a command called from the Operating system. The processes can communicate by sending events to pass the result from one processes to the next for further processing. By chaining together process as workflows or powerful statemachines. or work together to provide some other service for the end user. The possibilities are many.
+Create custom processes where what the processes do are either your own piece of code, or it can be a command called from the Operating system. The processes can communicate by sending events to pass the result from one processes to the next for further processing, or by chaining together process as workflows to create a series of Events that together will provide some end result.
 
 ### Processes
 
@@ -39,7 +39,7 @@ type Event struct {
 
 ### Event Functions
 
-Event Functions holds the logic for what to do when an event is received, and what to do with the data the event carries. The Event functions are callback functions that are executed when a process are created. 
+Event Functions holds the logic for what a process shall do when an event is received, and what to do with the data the event carries. The Event functions are callback functions that are executed when a process are created.
 
 The programmer can decide if the Process Function should depend on the input from the input channel of the process, or just continously do some work on it's own. For an event function to be triggered to work on events it should hold a for loop that listens on the Process InCh for new Events.
 
