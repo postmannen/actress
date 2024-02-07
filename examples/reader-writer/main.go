@@ -29,8 +29,9 @@ func main() {
 			for {
 				select {
 				case ev := <-p.InCh:
-					ev.Data = append(ev.Data, []byte(" processesed the data")...)
-					evR := NewEventRW(p, &ev, ETEventCreator)
+					ev.NextEvent.Data = append(ev.Data, []byte(" processesed the data")...)
+					// Use the next event that where defined in the event for the reply.
+					evR := NewEventRW(p, ev.NextEvent)
 					_, err := io.Copy(evR, evR)
 					if err != nil {
 						log.Fatalf("error: failed to io.Copy evR<-evR: %v\n", err)
@@ -59,7 +60,7 @@ func main() {
 					select {
 					case ev := <-p.InCh:
 						buf := &bytes.Buffer{}
-						evRW := NewEventRW(p, &ev, ETEventProcessor)
+						evRW := NewEventRW(p, &ev)
 						_, err := io.Copy(buf, evRW)
 						if err != nil {
 							log.Fatalf("error: failed to io.Copy buf<-erRW: %v\n", err)
@@ -76,7 +77,12 @@ func main() {
 			// Write method with io.Copy to send it of to the other process.
 			counter := 0
 			for {
-				erw := NewEventRW(p, nil, ETEventProcessor)
+				// Create a an Event with just EventType set, and the NextEvent
+				// set so the reply event will be sent back to us. The Data field
+				// will be set and handled by the Write method when called.
+				erw := NewEventRW(p, &actress.Event{EventType: ETEventProcessor,
+					NextEvent: &actress.Event{EventType: ETEventCreator}})
+
 				buf := bytes.NewBuffer([]byte{})
 				str := fmt.Sprintf("some data for event nr: %v", counter)
 				buf.Write([]byte(str))
@@ -114,23 +120,27 @@ func main() {
 }
 
 type eventRW struct {
-	p               *actress.Process
-	ev              *actress.Event
-	writeToEventype *actress.EventType
+	p  *actress.Process
+	ev *actress.Event
 }
 
-func NewEventRW(p *actress.Process, ev *actress.Event, writeToEventype actress.EventType) *eventRW {
-	m := eventRW{p: p,
-		ev:              ev,
-		writeToEventype: &writeToEventype}
+func NewEventRW(p *actress.Process, ev *actress.Event) *eventRW {
+	m := eventRW{
+		p:  p,
+		ev: ev,
+	}
 	return &m
 }
 
+// Write the data into Event.Data, and put the event into the EventCh to be processed.
 func (m *eventRW) Write(b []byte) (int, error) {
-	m.p.AddEvent(actress.Event{EventType: *m.writeToEventype, Data: b})
+	ev := m.ev
+	ev.Data = b
+	m.p.AddEvent(*ev)
 	return len(b), nil
 }
 
+// Read the data into b.
 func (m *eventRW) Read(b []byte) (int, error) {
 	copy(b, m.ev.Data)
 	return len(m.ev.Data), io.EOF
