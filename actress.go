@@ -2,6 +2,7 @@ package actress
 
 import (
 	"context"
+	"log"
 	"sync"
 )
 
@@ -131,10 +132,14 @@ type Process struct {
 	ErrorCh chan Event `json:"-"`
 	// Channel for getting the result in tests.
 	TestCh chan Event `json:"-"`
+	// Channel to use for routing events for dynamic processes.
+	DynCh chan Event `json:"-"`
 	// The event type for the process.
 	Event EventType
 	// Maps for various process information.
 	Processes *processes
+	// Map of dynamic processes
+	DynProcesses *dynProcesses
 	// Maps for various errProcess information
 	ErrProcesses *errProcesses
 	// Is this the root process.
@@ -164,12 +169,14 @@ func NewRootProcess(ctx context.Context) *Process {
 
 	p := Process{
 		fn:           nil,
-		InCh:         make(chan Event),
-		EventCh:      make(chan Event),
-		ErrorCh:      make(chan Event),
+		InCh:         make(chan Event, 1),
+		EventCh:      make(chan Event, 1),
+		ErrorCh:      make(chan Event, 1),
 		TestCh:       make(chan Event, 1),
+		DynCh:        make(chan Event, 1),
 		Event:        ETRoot,
 		Processes:    newProcesses(),
+		DynProcesses: newDynProcesses(),
 		ErrProcesses: newErrProcesses(),
 		isRoot:       true,
 		Config:       conf,
@@ -201,6 +208,8 @@ func NewRootProcess(ctx context.Context) *Process {
 	NewProcess(ctx, p, ETExit, etExitFn).Act()
 	NewProcess(ctx, p, ETPidGetAll, etPidGetAllFn).Act()
 
+	NewDynProcess(ctx, p, EDRouter, edRouterFn).Act()
+
 	NewErrProcess(ctx, p, ERRouter, erRouterFn).Act()
 	NewErrProcess(ctx, p, ERLog, erLogFn).Act()
 	NewErrProcess(ctx, p, ERDebug, erDebugFn).Act()
@@ -216,12 +225,14 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc
 	ctx, cancel := context.WithCancel(ctx)
 	p := Process{
 		fn:           nil,
-		InCh:         make(chan Event),
+		InCh:         make(chan Event, 1),
 		EventCh:      parentP.EventCh,
 		ErrorCh:      parentP.ErrorCh,
 		TestCh:       parentP.TestCh,
+		DynCh:        parentP.DynCh,
 		Event:        event,
 		Processes:    parentP.Processes,
+		DynProcesses: parentP.DynProcesses,
 		ErrProcesses: parentP.ErrProcesses,
 		isRoot:       false,
 		Config:       parentP.Config,
@@ -243,6 +254,11 @@ func (p *Process) AddEvent(event Event) {
 	p.EventCh <- event
 }
 
+// Will add an event to be handled by the processes.
+func (p *Process) AddDynEvent(event Event) {
+	p.DynCh <- event
+}
+
 // Will add an error to be handled by the error processes.
 func (p *Process) AddError(event Event) {
 	p.ErrorCh <- event
@@ -250,6 +266,7 @@ func (p *Process) AddError(event Event) {
 
 // Will start the current process.
 func (p *Process) Act() error {
+	log.Printf("Starting actor for EventType: %v\n", p.Event)
 	if p.fn == nil {
 		//go p.fn()
 		return nil

@@ -181,3 +181,9 @@ NextEvent makes it possible to define an event as a chain of Events. An example 
 ```go
 p.AddEvent(Event{EventType: EventType("ETBleeping"), NextEvent: &Event{EventType: ETPrint}})
 ```
+
+## Dynamic Processes
+
+The purpose of dynamic processes is to have short lived processes that can be quickly started, and removed again when it's job is done. The only difference between a "normal" process and a dynamic process are that the dynamic processes have a mutex in the processes map DynProcesses so we also can delete the processes when they are no longer needed.
+
+A typical example could be that there is a processes that needs to communicate in some other way with another process than cant be done with the current process's event channel. We can then spawn a dynamic process to take care of that. Check out the test and files in the examples directory. One process can spawn as many dynamic processes as it needs.

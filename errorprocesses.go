@@ -52,12 +52,14 @@ func NewErrProcess(ctx context.Context, parentP Process, event EventType, fn ETF
 	ctx, cancel := context.WithCancel(ctx)
 	p := Process{
 		fn:           nil,
-		InCh:         make(chan Event),
+		InCh:         make(chan Event, 1),
 		EventCh:      parentP.EventCh,
 		ErrorCh:      parentP.ErrorCh,
 		TestCh:       parentP.TestCh,
+		DynCh:        parentP.DynCh,
 		Event:        event,
 		Processes:    parentP.Processes,
+		DynProcesses: parentP.DynProcesses,
 		ErrProcesses: parentP.ErrProcesses,
 		isRoot:       false,
 		Config:       parentP.Config,

@@ -41,6 +41,7 @@ import (
 //     for this to work. Check out the examples folder for a simple
 //     example for how it could be implemented.
 type Event struct {
+	Nr int
 	// EventType is a unique name to identify the type of the event.
 	EventType EventType `json:"eventType" yaml:"eventType"`
 	// Cmd is usually used for giving instructions or parameters for

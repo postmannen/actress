@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"testing"
 )
 
@@ -41,6 +42,228 @@ func TestEventProcs(t *testing.T) {
 	rootp.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
 	if r := <-testCh; r != "test" {
 		t.Fatalf("ETTest failed\n")
+	}
+}
+
+func TestDynamicProcess(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	testCh := make(chan string)
+
+	const EDTest EventType = "EDTest"
+
+	tFunc := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			for {
+				select {
+				case result := <-p.InCh:
+					testCh <- string(result.Data)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	rootp := NewRootProcess(ctx)
+	err := rootp.Act()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	NewDynProcess(ctx, *rootp, EDTest, tFunc).Act()
+
+	rootp.AddDynEvent(Event{EventType: EDTest, Data: []byte("test")})
+	if r := <-testCh; r != "test" {
+		t.Fatalf("EDTest failed\n")
+	}
+}
+
+func TestDynamicProcess2(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const EDTest EventType = "EDTest"
+	// Test channel for receiving the final result.
+	testCh := make(chan string)
+
+	// tFunc is the function to be used with EventType EDTest.
+	// When receiving an EDTest event, we start up a dynamic
+	// process. The EventType to use for the new inner dynamic
+	// process can be found in the Cmd[2] field of the event
+	// to EDTest. Cmd[1] holds the other dynamic process to
+	// send Event to.
+	tFunc := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			for {
+				select {
+				case ev := <-p.InCh:
+					dyn1EVType := ev.Cmd[1]
+					dyn2EVType := ev.Cmd[2]
+					t.Logf("\ndyn1EVType: %v\ndyn2EVType: %v\n", dyn1EVType, dyn2EVType)
+
+					// Define and start the process for dyn2EVType.
+					NewDynProcess(ctx, *p, EventType(dyn2EVType),
+						func(ctx context.Context, p *Process) func() {
+							return func() {
+								select {
+								case <-p.InCh:
+									// Send an event to the dyn1EVType process.
+									p.AddDynEvent(Event{EventType: EventType(dyn1EVType), Data: []byte("from dyn2")})
+
+									// We are now done with the dyn2EVType process so we delete it.
+									p.DynProcesses.delete(EventType(dyn2EVType))
+									t.Logf("\nsuccessfully deleted process: %v\n", dyn2EVType)
+								case <-ctx.Done():
+									return
+								}
+							}
+						}).Act()
+
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	rootp := NewRootProcess(ctx)
+	err := rootp.Act()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	NewDynProcess(ctx, *rootp, EDTest, tFunc).Act()
+
+	// Create UUID's to be used for EventType's for the dynamic processes.
+	// We put them in the .Cmd field of EDTest so the receiver also know
+	// about them.
+	dyn1EVType := NewUUID()
+	dyn2EVType := NewUUID()
+
+	NewDynProcess(ctx, *rootp, EventType(dyn1EVType),
+		func(ctx context.Context, p *Process) func() {
+			return func() {
+				p.AddDynEvent(Event{EventType: EventType(dyn2EVType)})
+
+				select {
+				case ev := <-p.InCh:
+					testCh <- string(ev.Data)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}).Act()
+
+	rootp.AddDynEvent(Event{EventType: EDTest, Cmd: []string{"", dyn1EVType, dyn2EVType}, Data: []byte("test")})
+
+	if r := <-testCh; r != "from dyn2" {
+		t.Fatalf("EDTest failed\n")
+	} else {
+		t.Log("\n\U0001F602 SUCCESS")
+	}
+}
+
+func TestDynamicProcessReaderWriter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const EDTest EventType = "EDTest"
+	// Test channel for receiving the final result.
+	testCh := make(chan string)
+
+	rootp := NewRootProcess(ctx)
+	err := rootp.Act()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// tFunc is the function to be used with EventType EDTest.
+	// When receiving an EDTest event, we start up a dynamic
+	// process. The EventType to use for the new inner dynamic
+	// process can be found in the Cmd[2] field of the event
+	// to EDTest. Cmd[1] holds the other dynamic process to
+	// send Event to.
+	edTestFn := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			for {
+				select {
+				case ev := <-p.InCh:
+					dyn1EVType := ev.Cmd[1]
+					dyn2EVType := ev.Cmd[2]
+					t.Logf("\ndyn1EVType: %v\ndyn2EVType: %v\n", dyn1EVType, dyn2EVType)
+
+					// Define and start the process for dyn2EVType.
+					NewDynProcess(ctx, *p, EventType(dyn2EVType),
+						func(ctx context.Context, p *Process) func() {
+							return func() {
+								select {
+								case <-p.InCh:
+									// Send an event to the dyn1EVType process.
+									tmpEv := Event{EventType: EventType(dyn1EVType)}
+
+									erw := NewEventRW(p, &tmpEv, "in dyn2EVType reader writer")
+									erw.Write([]byte("from dyn2"))
+
+									p.AddDynEvent(tmpEv)
+
+									// We are now done with the dyn2EVType process so we delete it.
+									p.DynProcesses.delete(EventType(dyn2EVType))
+									t.Logf("\nsuccessfully deleted process: %v\n", dyn2EVType)
+								case <-ctx.Done():
+									return
+								}
+							}
+						}).Act()
+
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	NewDynProcess(ctx, *rootp, EDTest, edTestFn).Act()
+
+	// Create UUID's to be used for EventType's for the dynamic processes.
+	// We put them in the .Cmd field of EDTest so the receiver also know
+	// about them.
+	dyn1EVType := NewUUID()
+	dyn2EVType := NewUUID()
+
+	NewDynProcess(ctx, *rootp, EventType(dyn1EVType),
+		func(ctx context.Context, p *Process) func() {
+			return func() {
+				p.AddDynEvent(Event{EventType: EventType(dyn2EVType)})
+
+				select {
+				case ev := <-p.InCh:
+					erw := NewEventRW(p, &ev, "dyn1EVType Reader/Writer")
+					b, err := io.ReadAll(erw)
+					if err != nil {
+						t.Fatalf("dyn1EVType ReadAll failed: %v\n", err)
+					}
+
+					testCh <- string(b)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}).Act()
+
+	rootp.AddDynEvent(Event{EventType: EDTest, Cmd: []string{"", dyn1EVType, dyn2EVType}, Data: []byte("test")})
+
+	if r := <-testCh; r != "from dyn2" {
+		t.Fatalf("EDTest failed\n")
+	} else {
+		t.Log("\n\U0001F602 SUCCESS")
 	}
 }
 
