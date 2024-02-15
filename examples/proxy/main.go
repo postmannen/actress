@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -50,53 +49,75 @@ func main() {
 					if err != nil {
 						log.Fatalf("* error: destConn dial, err: %v, status: %v\n", err, http.StatusServiceUnavailable)
 						//return
-
 					}
 
-					// Send event back that we have connected.
 					fmt.Printf("***** ev nr: %v, Connected to : %v\n", ev.Nr, rHost)
-					p.AddEvent(actress.Event{EventType: ev.NextEvent.EventType})
+
+					// Send event back that we have connected.
+					// fmt.Printf("***** ev nr: %v, Connected to : %v\n", ev.Nr, rHost)
+					// p.AddEvent(actress.Event{EventType: ev.NextEvent.EventType})
 
 					actress.NewDynProcess(ctx, *p, actress.EventType(dynED2), func(ctx context.Context, p *actress.Process) func() {
 						return func() {
 
-							// Start Go routine for reading the event, writing the data
-							// to the tcp connection
-							go func() {
-								ev := <-p.InCh
-								erw := actress.NewEventRW(p, &ev, "in etHttpGetFn dynamic function ")
-
-								fmt.Printf("*******************3\n")
-								n, err := io.Copy(destConn, erw)
-								if err != nil {
-									log.Fatalf("error: failed io.Copy(destConn, erw): %v\n", err)
-								}
-								log.Printf(" ** etHttpGetFn, io.Copy(destConn, erw), copied bytes, n: %v\n", n)
-								fmt.Printf("*******************33\n")
-
-								// Cast the connetion to TCPConn so we can close just the write part.
-								dconn := destConn.(*net.TCPConn)
-								dconn.CloseWrite()
-							}()
-
-							// Start a Go routine for reading the TCP connection, and writing
-							// it to the event to be sent back.
+							// erw <- destConn
 							go func() {
 
-								erw := actress.NewEventRW(p, &actress.Event{EventType: actress.EventType(dynED1)}, "in etHttpGetFn dynamic function ")
+								for {
+									erw := actress.NewEventRW(p, &actress.Event{EventType: actress.EventType(dynED1)}, "in etHttpGetFn dynamic function ")
 
-								fmt.Printf("*******************4\n")
-								n, err := io.Copy(erw, destConn)
-								if err != nil {
-									log.Fatalf("error: failed io.Copy(erw, destConn): %v\n", err)
+									b := make([]byte, 1024*32)
+									fmt.Println("* Before destConn.Read")
+									ccn, cce := destConn.Read(b)
+									fmt.Println("** After destConn.Read")
+									if ccn > 0 {
+										cdn, cde := erw.Write(b[:ccn])
+										log.Printf("erw <- destConn, erw.Write bytes: %v\n", cdn)
+										if cde != nil {
+											log.Printf("erw <- destConn, error: erw.Write : %v\n", cde)
+											break
+										}
+										//doCh1 <- struct{}{}
+									}
+									if cce != nil {
+										log.Printf("erw <- destConn, error: destConn.Read: %v\n", err)
+										break
+									}
 								}
-								log.Printf(" ** etHttpGetFn, io.Copy(erw, destConn), copied bytes, n: %v\n", n)
-								fmt.Printf("*******************44\n")
 
 								// Cast the connetion to TCPConn so we can close just the read part.
-								dconn := destConn.(*net.TCPConn)
-								dconn.CloseRead()
+								//dconn := destConn.(*net.TCPConn)
+								//dconn.CloseRead()
 							}()
+
+							// destConn <- erw
+							go func() {
+								for {
+									ev := <-p.InCh
+									erw := actress.NewEventRW(p, &ev, "in etHttpGetFn dynamic function ")
+
+									b := make([]byte, 1024*32)
+									ccn, cce := erw.Read(b)
+									if ccn > 0 {
+										cdn, cde := destConn.Write(b[:ccn])
+										log.Printf("destConn <- erw, destConn.Write bytes: %v\n", cdn)
+										if cde != nil {
+											log.Printf("destConn <- erw, error: destConn.Write : %v\n", cde)
+											break
+										}
+										//doCh1 <- struct{}{}
+									}
+									if cce != nil {
+										log.Printf("destConn <- erw, error: erw.Read: %v\n", err)
+										break
+									}
+								}
+
+								// Cast the connetion to TCPConn so we can close just the write part.
+								//dconn := destConn.(*net.TCPConn)
+								//dconn.CloseWrite()
+							}()
+
 						}
 					}).Act()
 
@@ -109,6 +130,8 @@ func main() {
 		return fn
 	}
 
+	// --------------------------------------------------------------------------------------
+
 	etProxyListenerFn := func(ctx context.Context, p *actress.Process) func() {
 
 		fn := func() {
@@ -118,68 +141,86 @@ func main() {
 				// dynamic process name for the other (httpGet) side.
 				dynED2 := actress.NewUUID()
 
-				// Send an even to the httpGet actor to prepare the
-				// connection to the destination web page, and also
-				// to start up the dynamic actor within ETHttpGet to
-				// handle the reading and writing for that connection.
+				// Send an even to the httpGet actor to prepare the connection to the destination web page, and also
+				// to start up the dynamic actor within ETHttpGet to handle the reading and writing for that connection.
 				p.AddEvent(actress.Event{Nr: eventNR, EventType: ETHttpGet, Cmd: []string{r.Host, dynED1, dynED2}, NextEvent: &actress.Event{Nr: eventNR + 1, EventType: ETProxyListener}})
 				eventNR += 2
 
+				// Hijack the response writer
 				hijacker, ok := w.(http.Hijacker)
 				if !ok {
 					http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
 					return
 				}
-				clientConn, clientBuffr, err := hijacker.Hijack()
+				clientConn, _, err := hijacker.Hijack()
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusServiceUnavailable)
 				}
 
 				w.WriteHeader(http.StatusOK)
 
-				connectedEV := <-p.InCh
-				fmt.Printf(" --- got connected ev: %v\n", connectedEV)
+				//connectedEV := <-p.InCh
+				//fmt.Printf(" --- got connected ev: %v\n", connectedEV)
 
 				actress.NewDynProcess(ctx, *p, actress.EventType(dynED1), func(ctx context.Context, p *actress.Process) func() {
 					return func() {
+
+						// erw <- clientConn
 						go func() {
+							for {
+								// Creating a new Event Reader/Writer. We specify the Event to send when
+								// the Write method is called.
+								erw := actress.NewEventRW(p, &actress.Event{
+									Nr: eventNR, EventType: actress.EventType(dynED2)}, "in etProxyListenerFn dynamic function")
 
-							// TODO:
-							// The problem seems to be that when reading from the clientBuffr the
-							// number of bytes read are 0.
+								eventNR++
 
-							// Creating a new Event Reader/Writer. We specify the Event to send when
-							// the Write method is called.
-							erw := actress.NewEventRW(p, &actress.Event{ // The first event to send to httpGet
-								Nr: eventNR, EventType: actress.EventType(dynED2)}, "in etProxyListenerFn dynamic function")
-
-							eventNR++
-
-							fmt.Printf("*******************1\n")
-							n, err := io.Copy(erw, clientBuffr)
-							if err != nil {
-								log.Fatalf("error: failed io.Copy(erw, clientBuffr): %v\n", err)
+								b := make([]byte, 1024*32)
+								fmt.Println("- Before clientConn.Read")
+								ccn, cce := clientConn.Read(b)
+								fmt.Println("-- After clientConn.Read")
+								if ccn > 0 {
+									cdn, cde := erw.Write(b[:ccn])
+									log.Printf("erw <- clientConn, erw.Write bytes: %v\n", cdn)
+									if cde != nil {
+										log.Printf("erw <- clientConn, error: erw.Write : %v\n", cde)
+										break
+									}
+									//doCh1 <- struct{}{}
+								}
+								if cce != nil {
+									log.Printf("erw <- clientConn, error: clientConn.Read: %v\n", err)
+									break
+								}
 							}
-							log.Printf(" *** etProxyListenerFn, io.Copy(erw, clientBuffr), copied bytes, n: %v\n", n)
-							fmt.Printf("*******************11\n")
-
-							//clientConn.Close()
 						}()
+						//clientConn.Close()
+
+						// clientConn <- erw
 						go func() {
-							//n, err := io.Copy(clientBuffr, erw)
+							for {
+								ev := <-p.InCh
 
-							ev := <-p.InCh
+								erw := actress.NewEventRW(p, &ev, "clientConn <- erw, in etProxyListenerFn dynamic function")
 
-							erw := actress.NewEventRW(p, &ev, "in etProxyListenerFn dynamic function")
-							fmt.Printf("*******************2\n")
-							n, err := io.Copy(clientBuffr, erw)
-							if err != nil {
-								log.Fatalf("error: failed io.Copy(clientBuffr, erw): %v\n", err)
+								b := make([]byte, 1024*32)
+								ccn, cce := erw.Read(b)
+								if ccn > 0 {
+									cdn, cde := clientConn.Write(b[:ccn])
+									log.Printf("clientConn <- erw, clientConn.Write bytes: %v\n", cdn)
+									if cde != nil {
+										log.Printf("clientConn <- erw, error: clientConn.Write : %v\n", cde)
+										break
+									}
+									//doCh1 <- struct{}{}
+								}
+								if cce != nil {
+									log.Printf("clientConn <- erw, error: erw.Read: %v\n", err)
+									break
+								}
 							}
-							fmt.Printf("*******************22\n")
-							log.Printf(" *** etProxyListenerFn, io.Copy(clientBuffr, erw), copied bytes, n: %v\n", n)
 
-							clientConn.Close()
+							// clientConn.Close()
 						}()
 					}
 				}).Act()
