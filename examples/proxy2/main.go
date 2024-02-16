@@ -72,6 +72,7 @@ func main() {
 								fmt.Println("CLOSING: destConn")
 								destConn.Close()
 								p.Cancel()
+								defer p.DynProcesses.Delete("ETCLIENT")
 							}()
 
 							for {
@@ -113,12 +114,14 @@ func main() {
 
 				actress.NewDynProcess(ctx, *p, "ETDESTINATION", func(ctx context.Context, p *actress.Process) func() {
 					return func() {
+
 						// clientToDestinationBuf <- destinationConn
 						go func() {
 
 							defer func() {
 								fmt.Printf("CANCELED DESTINATION\n")
 								p.Cancel()
+								defer p.DynProcesses.Delete("ETDESTINATION")
 							}()
 
 							for {
@@ -190,6 +193,3 @@ func main() {
 
 	<-ctx.Done()
 }
-
-// TODO:
-// - Add removal of dynamic process from map when process is canceled, or ended.

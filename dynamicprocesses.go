@@ -3,6 +3,7 @@ package actress
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -17,7 +18,7 @@ type dynProcesses struct {
 }
 
 // Add a new Event and it's process to the processes map.
-func (p *dynProcesses) add(et EventType, proc *Process) {
+func (p *dynProcesses) Add(et EventType, proc *Process) {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
 	p.mu.Lock()
@@ -29,11 +30,12 @@ func (p *dynProcesses) add(et EventType, proc *Process) {
 }
 
 // Delete an Event and it's process from the processes map.
-func (p *dynProcesses) delete(et EventType) {
+func (p *dynProcesses) Delete(et EventType) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.procMap[et].Cancel()
 	delete(p.procMap, et)
+	log.Printf("deleted process %v\n", et)
 }
 
 // Checks if the event is defined in the processes map, and returns true if it is.
@@ -89,7 +91,7 @@ func NewDynProcess(ctx context.Context, parentP Process, event EventType, fn ETF
 		Cancel:       cancel,
 	}
 
-	p.DynProcesses.add(event, &p)
+	p.DynProcesses.Add(event, &p)
 
 	if fn != nil {
 		p.fn = fn(ctx, &p)

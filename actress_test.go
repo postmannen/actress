@@ -115,7 +115,7 @@ func TestDynamicProcess2(t *testing.T) {
 									p.AddDynEvent(Event{EventType: EventType(dyn1EVType), Data: []byte("from dyn2")})
 
 									// We are now done with the dyn2EVType process so we delete it.
-									p.DynProcesses.delete(EventType(dyn2EVType))
+									p.DynProcesses.Delete(EventType(dyn2EVType))
 									t.Logf("\nsuccessfully deleted process: %v\n", dyn2EVType)
 								case <-ctx.Done():
 									return
@@ -213,7 +213,7 @@ func TestDynamicProcessReaderWriter(t *testing.T) {
 									p.AddDynEvent(tmpEv)
 
 									// We are now done with the dyn2EVType process so we delete it.
-									p.DynProcesses.delete(EventType(dyn2EVType))
+									p.DynProcesses.Delete(EventType(dyn2EVType))
 									t.Logf("\nsuccessfully deleted process: %v\n", dyn2EVType)
 								case <-ctx.Done():
 									return
