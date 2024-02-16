@@ -43,9 +43,11 @@ func main() {
 					// dynamic process name for the other (httpGet) side.
 					dynED2 := ev.Cmd[2]
 
+					log.Printf("got event in etHttpGetFn, cmd: %v\n", ev.Cmd)
+
 					// TCP Connect to the destination.
 					fmt.Printf("***** ev nr: %v,  Preparing to Connect to : %v\n", ev.Nr, rHost)
-					destConn, err := net.DialTimeout("tcp", rHost, 5*time.Second)
+					destConn, err := net.DialTimeout("tcp4", rHost, 5*time.Second)
 					if err != nil {
 						log.Fatalf("* error: destConn dial, err: %v, status: %v\n", err, http.StatusServiceUnavailable)
 						//return
@@ -168,8 +170,7 @@ func main() {
 						// erw <- clientConn
 						go func() {
 							for {
-								// Creating a new Event Reader/Writer. We specify the Event to send when
-								// the Write method is called.
+								// Creating a new Event Reader/Writer. We specify the Event to send when the Write method is called.
 								erw := actress.NewEventRW(p, &actress.Event{
 									Nr: eventNR, EventType: actress.EventType(dynED2)}, "in etProxyListenerFn dynamic function")
 
