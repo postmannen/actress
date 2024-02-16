@@ -67,6 +67,8 @@ func main() {
 							defer func() {
 								fmt.Println("CLOSING: clientConn")
 								clientConn.Close()
+								fmt.Println("CLOSING: destConn")
+								destConn.Close()
 							}()
 
 							for {
@@ -109,10 +111,6 @@ func main() {
 					return func() {
 						// clientToDestinationBuf <- destinationConn
 						go func() {
-							defer func() {
-								fmt.Println("CLOSING: destConn")
-								destConn.Close()
-							}()
 
 							for {
 								b := make([]byte, 1024*32)
