@@ -37,6 +37,8 @@ func main() {
 	}
 
 	// --------------------------------------------------------------------------------------
+	// Event functions
+	// --------------------------------------------------------------------------------------
 
 	etProxyListenerFn := func(ctx context.Context, p *actress.Process) func() {
 
@@ -88,9 +90,13 @@ func main() {
 						// clientConn <- event
 						go func() {
 							for {
-								ev := <-p.InCh
-								n, err := clientConn.Write(ev.Data)
-								log.Printf("clientConn.Write), n: %v, err: %v\n", n, err)
+								select {
+								case ev := <-p.InCh:
+									n, err := clientConn.Write(ev.Data)
+									log.Printf("clientConn.Write), n: %v, err: %v\n", n, err)
+								case <-ctx.Done():
+									return
+								}
 							}
 						}()
 
@@ -127,10 +133,13 @@ func main() {
 						// destConn <- event
 						go func() {
 							for {
-								ev := <-p.InCh
-
-								n, err := destConn.Write(ev.Data)
-								log.Printf("destConn.Write), n: %v, err: %v\n", n, err)
+								select {
+								case ev := <-p.InCh:
+									n, err := destConn.Write(ev.Data)
+									log.Printf("destConn.Write), n: %v, err: %v\n", n, err)
+								case <-ctx.Done():
+									return
+								}
 							}
 						}()
 					}
