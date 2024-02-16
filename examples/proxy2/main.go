@@ -116,6 +116,11 @@ func main() {
 						// clientToDestinationBuf <- destinationConn
 						go func() {
 
+							defer func() {
+								fmt.Printf("CANCELED DESTINATION\n")
+								p.Cancel()
+							}()
+
 							for {
 								b := make([]byte, 1024*32)
 								fmt.Println("BEFORE READING destConn")
@@ -140,6 +145,7 @@ func main() {
 									n, err := destConn.Write(ev.Data)
 									log.Printf("destConn.Write), n: %v, err: %v\n", n, err)
 								case <-ctx.Done():
+									fmt.Printf("CANCELED GO ROUTINE FOR destConn <- event\n")
 									return
 								}
 							}
@@ -184,3 +190,6 @@ func main() {
 
 	<-ctx.Done()
 }
+
+// TODO:
+// - Add removal of dynamic process from map when process is canceled, or ended.
