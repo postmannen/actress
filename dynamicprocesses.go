@@ -23,7 +23,7 @@ func (p *dynProcesses) add(et EventType, proc *Process) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if _, ok := p.procMap[et]; ok {
-		p.procMap[et].cancel()
+		p.procMap[et].Cancel()
 	}
 	p.procMap[et] = proc
 }
@@ -32,7 +32,7 @@ func (p *dynProcesses) add(et EventType, proc *Process) {
 func (p *dynProcesses) delete(et EventType) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.procMap[et].cancel()
+	p.procMap[et].Cancel()
 	delete(p.procMap, et)
 }
 
@@ -86,7 +86,7 @@ func NewDynProcess(ctx context.Context, parentP Process, event EventType, fn ETF
 		Config:       parentP.Config,
 		pids:         parentP.pids,
 		PID:          parentP.pids.next(),
-		cancel:       cancel,
+		Cancel:       cancel,
 	}
 
 	p.DynProcesses.add(event, &p)

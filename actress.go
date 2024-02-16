@@ -18,7 +18,7 @@ func (p *processes) add(et EventType, proc *Process) {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
 	if _, ok := p.procMap[et]; ok {
-		p.procMap[et].cancel()
+		p.procMap[et].Cancel()
 	}
 	p.procMap[et] = proc
 }
@@ -151,7 +151,7 @@ type Process struct {
 	// PID of the process
 	PID pidnr
 	// Cancel func
-	cancel context.CancelFunc
+	Cancel context.CancelFunc
 }
 
 // NewRootProcess will prepare and return the root process
@@ -181,7 +181,7 @@ func NewRootProcess(ctx context.Context) *Process {
 		isRoot:       true,
 		Config:       conf,
 		pids:         newPids(),
-		cancel:       cancel,
+		Cancel:       cancel,
 	}
 
 	p.PID = p.pids.nr
@@ -238,7 +238,7 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc
 		Config:       parentP.Config,
 		pids:         parentP.pids,
 		PID:          parentP.pids.next(),
-		cancel:       cancel,
+		Cancel:       cancel,
 	}
 
 	p.Processes.add(event, &p)

@@ -16,7 +16,7 @@ func (p *errProcesses) add(et EventType, proc *Process) {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
 	if _, ok := p.procMap[et]; ok {
-		p.procMap[et].cancel()
+		p.procMap[et].Cancel()
 	}
 	p.procMap[et] = proc
 }
@@ -65,7 +65,7 @@ func NewErrProcess(ctx context.Context, parentP Process, event EventType, fn ETF
 		Config:       parentP.Config,
 		pids:         parentP.pids,
 		PID:          parentP.pids.next(),
-		cancel:       cancel,
+		Cancel:       cancel,
 	}
 
 	p.ErrProcesses.add(event, &p)

@@ -64,11 +64,14 @@ func main() {
 					return func() {
 						// Event ET2 <- clientConn
 						go func() {
+							defer fmt.Printf("CANCELED ETCLIENT\n")
+
 							defer func() {
 								fmt.Println("CLOSING: clientConn")
 								clientConn.Close()
 								fmt.Println("CLOSING: destConn")
 								destConn.Close()
+								p.Cancel()
 							}()
 
 							for {
@@ -97,6 +100,7 @@ func main() {
 									n, err := clientConn.Write(ev.Data)
 									log.Printf("clientConn.Write), n: %v, err: %v\n", n, err)
 								case <-ctx.Done():
+									fmt.Printf("CANCELED GO ROUTINE FOR clientConn <- event\n")
 									return
 								}
 							}
