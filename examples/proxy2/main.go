@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -59,14 +58,9 @@ func main() {
 					http.Error(w, err.Error(), http.StatusServiceUnavailable)
 				}
 
-				clientToDestinationBuf := actress.NewBuffer()
-				destinationToClientBuf := &bytes.Buffer{}
-
-				doCh1 := make(chan struct{}, 1)
-
-				actress.NewDynProcess(ctx, *p, "ET1", func(context.Context, *actress.Process) func() {
+				actress.NewDynProcess(ctx, *p, "ET1", func(ctx2 context.Context, p2 *actress.Process) func() {
 					return func() {
-						// clientToDestinationBuf <- clientConn
+						// Event ET2 <- clientConn
 						go func() {
 							defer func() {
 								fmt.Println("CLOSING: clientConn")
@@ -75,15 +69,13 @@ func main() {
 
 							for {
 								b := make([]byte, 1024*32)
+								fmt.Println("BEFORE READING clientConn")
 								ccn, cce := clientConn.Read(b)
+								fmt.Printf("AFTER READING clientConn, n: %v\n", ccn)
 								if ccn > 0 {
-									cdn, cde := clientToDestinationBuf.Write(b[:ccn])
-									log.Printf("clientToDestinationBuf.Write bytes: %v\n", cdn)
-									if cde != nil {
-										log.Printf("error: clientToDestinationBuf.Write : %v\n", cde)
-										break
-									}
-									doCh1 <- struct{}{}
+									fmt.Printf("AFTER READING clientConn, n: %v, but BEFORE sending event\n", ccn)
+									p.AddDynEvent(actress.Event{EventType: "ET2", Data: b[:ccn]})
+									fmt.Printf("AFTER READING clientConn, n: %v, and AFTER sending event\n", ccn)
 								}
 								if cce != nil {
 									log.Printf("error: clientConn.Read: %v\n", err)
@@ -93,26 +85,22 @@ func main() {
 
 						}()
 
-						// destConn <- clientToDestinationBuf
+						// clientConn <- event
 						go func() {
 							for {
-								<-doCh1
-								b := make([]byte, 1024*32)
-								n, err := clientToDestinationBuf.Read(b)
-								log.Printf("clientToDestinationBuf.Read), n: %v, err: %v\n", n, err)
+								ev := <-p2.InCh
 
-								n, err = destConn.Write(b[:n])
-								log.Printf("destConn.Read), n: %v, err: %v\n", n, err)
+								n, err := clientConn.Write(ev.Data)
+								log.Printf("clientConn.Write), n: %v, err: %v\n", n, err)
 							}
 						}()
+
 					}
 				}).Act()
 
 				// ---------------------------------------------------------------
 
-				doCh2 := make(chan struct{}, 1)
-
-				actress.NewDynProcess(ctx, *p, "ET2", func(context.Context, *actress.Process) func() {
+				actress.NewDynProcess(ctx, *p, "ET2", func(ctx2 context.Context, p2 *actress.Process) func() {
 					return func() {
 						// clientToDestinationBuf <- destinationConn
 						go func() {
@@ -123,15 +111,11 @@ func main() {
 
 							for {
 								b := make([]byte, 1024*32)
+								fmt.Println("BEFORE READING destConn")
 								ccn, cce := destConn.Read(b)
+								fmt.Printf("AFTER READING destConn, n: %v\n", ccn)
 								if ccn > 0 {
-									cdn, cde := destinationToClientBuf.Write(b[:ccn])
-									log.Printf("destinationToClientBuf.Write bytes: %v\n", cdn)
-									if cde != nil {
-										log.Printf("error: destinationToClientBuf.Write : %v\n", cde)
-										break
-									}
-									doCh2 <- struct{}{}
+									p.AddDynEvent(actress.Event{EventType: "ET1", Data: b[:ccn]})
 								}
 								if cce != nil {
 									log.Printf("error: destConn.Read: %v\n", err)
@@ -141,16 +125,13 @@ func main() {
 
 						}()
 
-						// clientConn <- destinationToClientBuf
+						// destConn <- event
 						go func() {
 							for {
-								<-doCh2
-								b := make([]byte, 1024*32)
-								n, err := destinationToClientBuf.Read(b)
-								log.Printf("destinationToClientBuf.Read), n: %v, err: %v\n", n, err)
+								ev := <-p2.InCh
 
-								n, err = clientConn.Write(b[:n])
-								log.Printf("clientConn.Read), n: %v, err: %v\n", n, err)
+								n, err := destConn.Write(ev.Data)
+								log.Printf("destConn.Write), n: %v, err: %v\n", n, err)
 							}
 						}()
 					}
