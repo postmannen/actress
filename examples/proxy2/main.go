@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -41,8 +40,7 @@ func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 						}
 
 						defer func() {
-							fmt.Printf("CANCELED DESTINATION, %v\n", thisET)
-							p.Cancel()
+							log.Printf("CANCELED DESTINATION, %v\n", thisET)
 							cancel()
 							defer p.DynProcesses.Delete(actress.EventType(thisET))
 						}()
@@ -53,9 +51,12 @@ func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 								select {
 								case ev := <-p.InCh:
 									n, err := destConn.Write(ev.Data)
+									if len(ev.Data) == 0 {
+										destConn.Close()
+									}
 									log.Printf("destConn.Write), n: %v, err: %v,%v\n", n, err, thisET)
 								case <-ctx.Done():
-									fmt.Printf("CANCELED GO ROUTINE FOR destConn <- event, closing destConn\n")
+									log.Printf("CANCELED GO ROUTINE FOR destConn <- event, closing destConn\n")
 									destConn.Close()
 									return
 								}
@@ -64,11 +65,12 @@ func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 
 						for {
 							b := make([]byte, 1024*32)
-							fmt.Printf("BEFORE READING destConn, %v\n", thisET)
+
 							ccn, cce := destConn.Read(b)
-							fmt.Printf("AFTER READING destConn, n: %v, %v\n", ccn, thisET)
+							log.Printf("READ destConn, n: %v, err: %v, %v\n", ccn, err, thisET)
 							if ccn > 0 {
 								p.AddDynEvent(actress.Event{EventType: actress.EventType(listenerET), Data: b[:ccn]})
+								log.Printf("AFTER READING destConn, n: %v, and AFTER sending event, %v\n", ccn, thisET)
 							}
 							if cce != nil {
 								log.Printf("error: destConn.Read: %v, %v\n", err, thisET)
@@ -108,7 +110,7 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 				EventType: ETHttpGet,
 				Cmd:       cmd,
 			})
-			fmt.Printf("AddEvent to start up remote http get'er: %v\n", cmd)
+			log.Printf("Added Event to start up remote http get'er: %v\n", cmd)
 
 			w.WriteHeader(http.StatusOK)
 			hijacker, ok := w.(http.Hijacker)
@@ -125,27 +127,25 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 				return func() {
 					// Event ET2 <- clientConn
 					go func() {
-						defer fmt.Printf("CANCELED LISTENER %v\n", listenerET)
+						defer log.Printf("CANCELED LISTENER %v\n", listenerET)
 
 						defer func() {
-							fmt.Printf("CLOSING: clientConn, %v", listenerET)
+							log.Printf("CLOSING: clientConn, %v", listenerET)
 							clientConn.Close()
-							//fmt.Println("CLOSING: destConn")
-							//destConn.Close()
 							p.Cancel()
 							defer p.DynProcesses.Delete(actress.EventType(listenerET))
 						}()
 
 						for {
 							b := make([]byte, 1024*32)
-							fmt.Printf("BEFORE READING clientConn, %v\n", listenerET)
 							ccn, cce := clientConn.Read(b)
-							fmt.Printf("AFTER READING clientConn, n: %v, %v\n", ccn, listenerET)
-							if ccn > 0 {
-								fmt.Printf("AFTER READING clientConn, n: %v, but BEFORE sending event, %v\n", ccn, listenerET)
-								p.AddDynEvent(actress.Event{EventType: actress.EventType(geterET), Data: b[:ccn]})
-								fmt.Printf("AFTER READING clientConn, n: %v, and AFTER sending event, %v\n", ccn, listenerET)
-							}
+							log.Printf("AFTER READING clientConn, n: %v, %v\n", ccn, listenerET)
+							//if ccn > 0 {
+
+							p.AddDynEvent(actress.Event{EventType: actress.EventType(geterET), Data: b[:ccn]})
+							log.Printf("AFTER READING clientConn, n: %v, and AFTER sending event, %v\n", ccn, listenerET)
+
+							//}
 							if cce != nil {
 								log.Printf("error: clientConn.Read: %v, %v\n", err, listenerET)
 								break
@@ -162,7 +162,7 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 								n, err := clientConn.Write(ev.Data)
 								log.Printf("clientConn.Write), n: %v, err: %v\n", n, err)
 							case <-ctx.Done():
-								fmt.Printf("CANCELED GO ROUTINE FOR clientConn <- event\n")
+								log.Printf("CANCELED GO ROUTINE FOR clientConn <- event\n")
 								return
 							}
 						}
@@ -181,7 +181,7 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 				handleTunneling(w, r)
-				fmt.Printf("handler: handleTunneling, method: %v\n", r.Method)
+				log.Printf("handler: handleTunneling, method: %v\n", r.Method)
 
 			}),
 			// Disable HTTP/2.
