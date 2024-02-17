@@ -29,51 +29,52 @@ func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 
 				actress.NewDynProcess(ctx, *p, actress.EventType(thisET), func(ctx context.Context, p *actress.Process) func() {
 					return func() {
+						timeout := 5
+						ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
 
 						// clientToDestinationBuf <- destinationConn
-						go func() {
 
-							destConn, err := net.DialTimeout("tcp", rHost, 10*time.Second)
-							if err != nil {
-								log.Fatalf("error: DialTimeout failed: %v\n", err)
-								return
-							}
+						destConn, err := net.DialTimeout("tcp", rHost, time.Duration(timeout)*time.Second)
+						if err != nil {
+							log.Fatalf("error: DialTimeout failed: %v\n", err)
+							return
+						}
 
-							defer func() {
-								fmt.Printf("CANCELED DESTINATION, %v\n", thisET)
-								p.Cancel()
-								defer p.DynProcesses.Delete(actress.EventType(thisET))
-							}()
-
-							// destConn <- event
-							go func() {
-								for {
-									select {
-									case ev := <-p.InCh:
-										n, err := destConn.Write(ev.Data)
-										log.Printf("destConn.Write), n: %v, err: %v,%v\n", n, err, thisET)
-									case <-ctx.Done():
-										fmt.Printf("CANCELED GO ROUTINE FOR destConn <- event\n")
-										return
-									}
-								}
-							}()
-
-							for {
-								b := make([]byte, 1024*32)
-								fmt.Printf("BEFORE READING destConn, %v\n", thisET)
-								ccn, cce := destConn.Read(b)
-								fmt.Printf("AFTER READING destConn, n: %v, %v\n", ccn, thisET)
-								if ccn > 0 {
-									p.AddDynEvent(actress.Event{EventType: actress.EventType(listenerET), Data: b[:ccn]})
-								}
-								if cce != nil {
-									log.Printf("error: destConn.Read: %v, %v\n", err, thisET)
-									break
-								}
-							}
-
+						defer func() {
+							fmt.Printf("CANCELED DESTINATION, %v\n", thisET)
+							p.Cancel()
+							cancel()
+							defer p.DynProcesses.Delete(actress.EventType(thisET))
 						}()
+
+						// destConn <- event
+						go func() {
+							for {
+								select {
+								case ev := <-p.InCh:
+									n, err := destConn.Write(ev.Data)
+									log.Printf("destConn.Write), n: %v, err: %v,%v\n", n, err, thisET)
+								case <-ctx.Done():
+									fmt.Printf("CANCELED GO ROUTINE FOR destConn <- event, closing destConn\n")
+									destConn.Close()
+									return
+								}
+							}
+						}()
+
+						for {
+							b := make([]byte, 1024*32)
+							fmt.Printf("BEFORE READING destConn, %v\n", thisET)
+							ccn, cce := destConn.Read(b)
+							fmt.Printf("AFTER READING destConn, n: %v, %v\n", ccn, thisET)
+							if ccn > 0 {
+								p.AddDynEvent(actress.Event{EventType: actress.EventType(listenerET), Data: b[:ccn]})
+							}
+							if cce != nil {
+								log.Printf("error: destConn.Read: %v, %v\n", err, thisET)
+								break
+							}
+						}
 
 					}
 				}).Act()
