@@ -166,7 +166,7 @@ type Process struct {
 	// PID of the process
 	PID pidnr
 	// Cancel func
-	Cancel context.CancelFunc
+	Cancel context.CancelFunc `json:"-"`
 }
 
 // NewRootProcess will prepare and return the root process
