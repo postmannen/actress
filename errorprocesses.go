@@ -1,3 +1,18 @@
+// Actress Copyright (C) 2024  Bjørn Tore Svinningen
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 package actress
 
 import (
@@ -16,7 +31,7 @@ func (p *errProcesses) add(et EventType, proc *Process) {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
 	if _, ok := p.procMap[et]; ok {
-		p.procMap[et].cancel()
+		p.procMap[et].Cancel()
 	}
 	p.procMap[et] = proc
 }
@@ -65,7 +80,7 @@ func NewErrProcess(ctx context.Context, parentP Process, event EventType, fn ETF
 		Config:       parentP.Config,
 		pids:         parentP.pids,
 		PID:          parentP.pids.next(),
-		cancel:       cancel,
+		Cancel:       cancel,
 	}
 
 	p.ErrProcesses.add(event, &p)

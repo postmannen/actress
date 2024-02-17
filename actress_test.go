@@ -1,3 +1,18 @@
+// Actress Copyright (C) 2024  Bjørn Tore Svinningen
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 package actress
 
 import (
@@ -115,7 +130,7 @@ func TestDynamicProcess2(t *testing.T) {
 									p.AddDynEvent(Event{EventType: EventType(dyn1EVType), Data: []byte("from dyn2")})
 
 									// We are now done with the dyn2EVType process so we delete it.
-									p.DynProcesses.delete(EventType(dyn2EVType))
+									p.DynProcesses.Delete(EventType(dyn2EVType))
 									t.Logf("\nsuccessfully deleted process: %v\n", dyn2EVType)
 								case <-ctx.Done():
 									return
@@ -213,7 +228,7 @@ func TestDynamicProcessReaderWriter(t *testing.T) {
 									p.AddDynEvent(tmpEv)
 
 									// We are now done with the dyn2EVType process so we delete it.
-									p.DynProcesses.delete(EventType(dyn2EVType))
+									p.DynProcesses.Delete(EventType(dyn2EVType))
 									t.Logf("\nsuccessfully deleted process: %v\n", dyn2EVType)
 								case <-ctx.Done():
 									return

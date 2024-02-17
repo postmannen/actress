@@ -13,30 +13,31 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package main
+package actress
 
 import (
-	"context"
-	"log"
-
-	"github.com/postmannen/actress"
+	"bytes"
+	"sync"
 )
 
-func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+type Buffer struct {
+	buffer bytes.Buffer
+	mu     sync.Mutex
+}
 
-	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx)
-	rootAct.Act()
+func NewBuffer() *Buffer {
+	b := Buffer{}
+	return &b
+}
 
-	// Start all the registered actors.
-	err := rootAct.Act()
-	if err != nil {
-		log.Fatal(err)
-	}
+func (bu *Buffer) Read(p []byte) (int, error) {
+	bu.mu.Lock()
+	defer bu.mu.Unlock()
+	return bu.buffer.Read(p)
+}
 
-	<-ctx.Done()
-
-	cancel()
+func (bu *Buffer) Write(b []byte) (int, error) {
+	bu.mu.Lock()
+	defer bu.mu.Unlock()
+	return bu.buffer.Write(b)
 }
