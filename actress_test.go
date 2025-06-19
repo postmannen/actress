@@ -46,7 +46,7 @@ func TestEventProcs(t *testing.T) {
 		return fn
 	}
 
-	rootp := NewRootProcess(ctx)
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestDynamicProcess(t *testing.T) {
 		return fn
 	}
 
-	rootp := NewRootProcess(ctx)
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +147,7 @@ func TestDynamicProcess2(t *testing.T) {
 		return fn
 	}
 
-	rootp := NewRootProcess(ctx)
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
@@ -192,7 +192,7 @@ func TestDynamicProcessReaderWriter(t *testing.T) {
 	// Test channel for receiving the final result.
 	testCh := make(chan string)
 
-	rootp := NewRootProcess(ctx)
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
@@ -286,7 +286,7 @@ func TestNextEventProcs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rootp := NewRootProcess(ctx)
+	rootp := NewRootProcess(ctx, nil)
 
 	testCh := make(chan string)
 	const ETTest EventType = "ETTest"
@@ -364,7 +364,7 @@ func TestPidToProcMap(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rootp := NewRootProcess(ctx)
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
@@ -426,7 +426,7 @@ func BenchmarkSingleProcess(b *testing.B) {
 		return fn
 	}
 
-	rootp := NewRootProcess(ctx)
+	rootp := NewRootProcess(ctx, nil)
 	NewProcess(ctx, *rootp, ETTest, tFunc).Act()
 	err := rootp.Act()
 	if err != nil {
@@ -466,7 +466,7 @@ func BenchmarkSingleProcessEventAndError(b *testing.B) {
 		return fn
 	}
 
-	rootp := NewRootProcess(ctx)
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		b.Fatal(err)
@@ -487,7 +487,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rootp := NewRootProcess(ctx)
+	rootp := NewRootProcess(ctx, nil)
 
 	testCh := make(chan string)
 
@@ -548,7 +548,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rootp := NewRootProcess(ctx)
+	rootp := NewRootProcess(ctx, nil)
 
 	testCh := make(chan string)
 

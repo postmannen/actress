@@ -84,7 +84,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := ac.NewRootProcess(ctx)
+	rootAct := ac.NewRootProcess(ctx, nil)
 	err := rootAct.Act()
 	if err != nil {
 		log.Fatal(err)

@@ -15,7 +15,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx)
+	rootAct := actress.NewRootProcess(ctx, nil)
 	rootAct.Act()
 
 	// Create a test channel where we receive the end result.

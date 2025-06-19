@@ -178,7 +178,7 @@ type Process struct {
 // The root process will also start up all the essential other
 // processes needed, like the event router, and various standard
 // error handling processes.
-func NewRootProcess(ctx context.Context) *Process {
+func NewRootProcess(ctx context.Context, fn ETFunc) *Process {
 	ctx, cancel := context.WithCancel(ctx)
 	conf := NewConfig()
 
@@ -200,6 +200,10 @@ func NewRootProcess(ctx context.Context) *Process {
 	}
 
 	p.PID = p.pids.nr
+
+	if fn != nil {
+		p.fn = fn(ctx, &p)
+	}
 
 	// Register and start all the standard child processes
 	// that should spawn off the root process

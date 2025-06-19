@@ -766,7 +766,7 @@ func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) fu
 }
 
 // Execute OS commands. The command to execute should be put in the first slot
-// of the arrat at Event.Cmd[0], and all arguments should be put int the sub
+// of the array at Event.Cmd[0], and all arguments should be put int the sub
 // sequent slots. To make it simpler to run commands without splitting the up
 // on Linux like operating systems use the -c flag with bash. Example,
 // Event{EventType: etOsCmd, Cmd: ["bash","-c","ls -l|grep myfile"]}.
