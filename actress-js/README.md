@@ -4,7 +4,7 @@ A Concurrent Actor framework for JavaScript/Browser applications, inspired by th
 
 ## Overview
 
-Actress-JS brings the power of actor-based concurrent programming to JavaScript environments, particularly browsers. Create custom processes where each process performs specific tasks, communicating through events to pass results and chain operations together as workflows.
+Actress-JS is an opinionated take on an actor system. Create custom processes where each process performs specific tasks, communicating through events to pass results and chain operations together as workflows.
 
 ### Key Features
 
@@ -12,7 +12,7 @@ Actress-JS brings the power of actor-based concurrent programming to JavaScript 
 - **Process Management**: Create, manage, and coordinate multiple concurrent processes
 - **Event Chaining**: Chain events together to create workflows using NextEvent
 - **Error Handling**: Built-in error handling and routing system
-- **Browser Optimized**: Designed specifically for browser environments
+- **Browser Optimized**: Designed for browser environments
 - **Zero Dependencies**: Pure JavaScript with no external dependencies
 
 ## Quick Start
@@ -293,16 +293,8 @@ See the `examples/` directory for complete working examples:
 
 ## Browser Compatibility
 
-Actress-JS works in all modern browsers that support:
-- ES6 Modules
-- Async/Await
-- Fetch API
-- Maps and Sets
+Actress-JS should work in most browsers.
 
 ## License
 
 AGPL-3.0 - Same as the original Go Actress library
-
-## Contributing
-
-Contributions welcome! Please feel free to submit issues and pull requests.
