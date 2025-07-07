@@ -1,6 +1,6 @@
 # Actress-JS
 
-A Concurrent Actor framework for JavaScript/Browser applications, inspired by the Go Actress library.
+A Concurrent Actor framework for JavaScript/Browser applications, based on the idea of the Go Actress library.
 
 ## Overview
 
@@ -288,13 +288,10 @@ actress.clearTestEvents();
 
 See the `examples/` directory for complete working examples:
 
-- `basic-example.html` - Interactive browser example
-- More examples coming soon...
-
 ## Browser Compatibility
 
 Actress-JS should work in most browsers.
 
 ## License
 
-AGPL-3.0 - Same as the original Go Actress library
+AGPL-3.0
