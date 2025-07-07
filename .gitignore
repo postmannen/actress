@@ -20,3 +20,5 @@
 # Go workspace file
 go.work
 tmp
+actress-zig/.zig-cache
+actress-zig/zig-out
