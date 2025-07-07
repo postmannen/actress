@@ -100,9 +100,9 @@ pub fn main() !void {
         allocator.destroy(root);
     }
 
-    // Create the processes
-    const httpget_process = try actress.newProcess(allocator, &root.process, ETHttpGet, httpGetFn);
-    const writefile_process = try actress.newProcess(allocator, &root.process, ETWriteToFile, writeToFileFn);
+    // Create the processes using tracked process creation
+    const httpget_process = try actress.newTrackedProcess(allocator, root, &root.process, ETHttpGet, httpGetFn);
+    const writefile_process = try actress.newTrackedProcess(allocator, root, &root.process, ETWriteToFile, writeToFileFn);
 
     // Start the processes
     try httpget_process.act();
@@ -118,7 +118,11 @@ pub fn main() !void {
     root.process.addEvent(http_event);
 
     // Wait for processing to complete
-    std.time.sleep(2 * std.time.ns_per_s);
+    std.time.sleep(1 * std.time.ns_per_s);
 
     print("HTTP GET example completed!\n", .{});
+
+    // Send exit event to shutdown system gracefully
+    const exit_event = actress.newEvent(allocator, actress.ETExit);
+    root.process.addEvent(exit_event);
 }

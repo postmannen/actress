@@ -91,8 +91,10 @@ pub fn initActressSystem(allocator: Allocator) !*RootProcess {
     try debug_process.act();
     try fatal_process.act();
 
-    // Start the root process if it has a function
-    try root.process.act();
+    // Start the root process only if it has a function
+    if (root.process.process_fn != null) {
+        try root.process.act();
+    }
 
     return root;
 }
