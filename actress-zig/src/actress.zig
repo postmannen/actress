@@ -25,8 +25,10 @@ pub const Channel = @import("channel.zig").Channel;
 // Export process management
 pub const newRootProcess = @import("process.zig").newRootProcess;
 pub const newProcess = @import("process.zig").newProcess;
+pub const newTrackedProcess = @import("process.zig").newTrackedProcess;
 pub const newDynProcess = @import("dynamic_processes.zig").newDynProcess;
 pub const newErrProcess = @import("error_processes.zig").newErrProcess;
+pub const newTrackedErrProcess = @import("error_processes.zig").newTrackedErrProcess;
 pub const removeDynProcess = @import("dynamic_processes.zig").removeDynProcess;
 
 // Export built-in event types
@@ -62,20 +64,20 @@ pub fn initActressSystem(allocator: Allocator) !*RootProcess {
     const root = try newRootProcess(allocator, null);
 
     // Create essential system processes
-    const router_process = try newProcess(allocator, &root.process, ETRouter, etRouterFn);
-    const dyn_router_process = try newProcess(allocator, &root.process, EDRouter, edRouterFn);
-    const err_router_process = try newErrProcess(allocator, &root.process, ERRouter, erRouterFn);
+    const router_process = try newTrackedProcess(allocator, root, &root.process, ETRouter, etRouterFn);
+    const dyn_router_process = try newTrackedProcess(allocator, root, &root.process, EDRouter, edRouterFn);
+    const err_router_process = try newTrackedErrProcess(allocator, root, &root.process, ERRouter, erRouterFn);
 
     // Create built-in event handlers
-    const print_process = try newProcess(allocator, &root.process, ETPrint, etPrintFn);
-    const done_process = try newProcess(allocator, &root.process, ETDone, etDoneFn);
-    const exit_process = try newProcess(allocator, &root.process, ETExit, etExitFn);
-    const test_process = try newProcess(allocator, &root.process, ETTestCh, etTestChFn);
+    const print_process = try newTrackedProcess(allocator, root, &root.process, ETPrint, etPrintFn);
+    const done_process = try newTrackedProcess(allocator, root, &root.process, ETDone, etDoneFn);
+    const exit_process = try newTrackedProcess(allocator, root, &root.process, ETExit, etExitFn);
+    const test_process = try newTrackedProcess(allocator, root, &root.process, ETTestCh, etTestChFn);
 
     // Create error handlers
-    const log_process = try newErrProcess(allocator, &root.process, ERLog, erLogFn);
-    const debug_process = try newErrProcess(allocator, &root.process, ERDebug, erDebugFn);
-    const fatal_process = try newErrProcess(allocator, &root.process, ERFatal, erFatalFn);
+    const log_process = try newTrackedErrProcess(allocator, root, &root.process, ERLog, erLogFn);
+    const debug_process = try newTrackedErrProcess(allocator, root, &root.process, ERDebug, erDebugFn);
+    const fatal_process = try newTrackedErrProcess(allocator, root, &root.process, ERFatal, erFatalFn);
 
     // Start all essential processes
     try router_process.act();

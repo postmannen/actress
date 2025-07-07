@@ -13,7 +13,7 @@ pub fn newDynProcess(allocator: Allocator, parent: *Process, event_type: EventTy
     const process = try allocator.create(Process);
 
     process.* = Process{
-        .process_fn = func,
+        .process_fn = if (func) |f| @ptrCast(f) else null,
         .in_ch = Channel(Event).init(allocator, 10),
         .event_ch = parent.event_ch,
         .error_ch = parent.error_ch,

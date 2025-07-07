@@ -97,8 +97,8 @@ pub fn main() !void {
     }
 
     // Create the two processes
-    const test1_process = try actress.newProcess(allocator, &root.process, ETTest1, test1Fn);
-    const test2_process = try actress.newProcess(allocator, &root.process, ETTest2, test2Fn);
+    const test1_process = try actress.newTrackedProcess(allocator, root, &root.process, ETTest1, test1Fn);
+    const test2_process = try actress.newTrackedProcess(allocator, root, &root.process, ETTest2, test2Fn);
 
     // Start the processes
     try test1_process.act();
@@ -117,7 +117,11 @@ pub fn main() !void {
     root.process.addEvent(initial_event);
 
     // Wait for processing to complete
-    std.time.sleep(2 * std.time.ns_per_s);
+    std.time.sleep(1 * std.time.ns_per_s);
 
     print("Example completed!\n", .{});
+
+    // Send exit event to shutdown system gracefully
+    const exit_event = actress.newEvent(allocator, actress.ETExit);
+    root.process.addEvent(exit_event);
 }

@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 const Event = @import("event.zig").Event;
 const EventType = @import("event.zig").EventType;
 const Process = @import("process.zig").Process;
+const RootProcess = @import("process.zig").RootProcess;
 const ETFunc = @import("process.zig").ETFunc;
 const Channel = @import("channel.zig").Channel;
 
@@ -13,7 +14,7 @@ pub fn newErrProcess(allocator: Allocator, parent: *Process, event_type: EventTy
     const process = try allocator.create(Process);
 
     process.* = Process{
-        .process_fn = func,
+        .process_fn = if (func) |f| @ptrCast(f) else null,
         .in_ch = Channel(Event).init(allocator, 10),
         .event_ch = parent.event_ch,
         .error_ch = parent.error_ch,
@@ -35,5 +36,12 @@ pub fn newErrProcess(allocator: Allocator, parent: *Process, event_type: EventTy
     // Register the error process
     parent.err_processes.add(event_type, process);
 
+    return process;
+}
+
+/// Create a new error process and track it in root for cleanup
+pub fn newTrackedErrProcess(allocator: Allocator, root: *RootProcess, parent: *Process, event_type: EventType, func: ?ETFunc) !*Process {
+    const process = try newErrProcess(allocator, parent, event_type, func);
+    root.trackProcess(process);
     return process;
 }

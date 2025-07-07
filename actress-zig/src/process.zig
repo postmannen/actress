@@ -14,23 +14,6 @@ const builtin_events = @import("builtin_events.zig");
 /// Process ID type
 pub const PidNr = u32;
 
-/// Function type for process functions
-pub const ETFunc = *const fn (allocator: Allocator, process: *Process) anyerror!void;
-
-/// Context for passing to process wrapper
-const ProcessContext = struct {
-    func: ETFunc,
-    allocator: Allocator,
-    process: *Process,
-};
-
-/// Wrapper function for spawning threads
-fn processWrapper(context: ProcessContext) void {
-    context.func(context.allocator, context.process) catch |err| {
-        std.log.err("Process function error: {}", .{err});
-    };
-}
-
 /// Process Map type
 const ProcessMap = HashMap(EventType, *Process, EventTypeContext, std.hash_map.default_max_load_percentage);
 
@@ -230,7 +213,7 @@ pub const Pids = struct {
 /// Process defines a process (actor)
 pub const Process = struct {
     /// Process function
-    process_fn: ?ETFunc,
+    process_fn: ?*const anyopaque,
 
     /// Channel to receive events into the process function
     in_ch: Channel(Event),
@@ -312,7 +295,8 @@ pub const Process = struct {
 
     /// Start the process
     pub fn act(self: *Self) !void {
-        if (self.process_fn) |func| {
+        if (self.process_fn) |func_ptr| {
+            const func: ETFunc = @ptrCast(@alignCast(func_ptr));
             const context = ProcessContext{
                 .func = func,
                 .allocator = self.allocator,
@@ -355,6 +339,23 @@ pub const Process = struct {
     }
 };
 
+/// Function type for process functions - moved after Process definition
+pub const ETFunc = *const fn (allocator: Allocator, process: *Process) anyerror!void;
+
+/// Context for passing to process wrapper
+const ProcessContext = struct {
+    func: ETFunc,
+    allocator: Allocator,
+    process: *Process,
+};
+
+/// Wrapper function for spawning threads
+fn processWrapper(context: ProcessContext) void {
+    context.func(context.allocator, context.process) catch |err| {
+        std.log.err("Process function error: {}", .{err});
+    };
+}
+
 /// Root Process - special process that manages the entire system
 pub const RootProcess = struct {
     process: Process,
@@ -369,9 +370,19 @@ pub const RootProcess = struct {
     config: Config,
     allocator: Allocator,
 
+    // Track all allocated processes for cleanup
+    all_processes: ArrayList(*Process),
+
     const Self = @This();
 
     pub fn deinit(self: *Self) void {
+        // Cancel and free all tracked processes first
+        for (self.all_processes.items) |proc| {
+            proc.cancel();
+            self.allocator.destroy(proc);
+        }
+        self.all_processes.deinit();
+
         self.process.deinit();
         self.event_ch.deinit();
         self.error_ch.deinit();
@@ -380,6 +391,13 @@ pub const RootProcess = struct {
         self.processes.deinit();
         self.dyn_processes.deinit();
         self.err_processes.deinit();
+    }
+
+    /// Track a process for cleanup
+    pub fn trackProcess(self: *Self, proc: *Process) void {
+        self.all_processes.append(proc) catch |err| {
+            std.log.err("Failed to track process: {}", .{err});
+        };
     }
 };
 
@@ -399,10 +417,11 @@ pub fn newRootProcess(allocator: Allocator, func: ?ETFunc) !*RootProcess {
         .config = Config.initFromEnv(),
         .allocator = allocator,
         .process = undefined,
+        .all_processes = ArrayList(*Process).init(allocator),
     };
 
     root.process = Process{
-        .process_fn = func,
+        .process_fn = if (func) |f| @ptrCast(f) else null,
         .in_ch = Channel(Event).init(allocator, 10),
         .event_ch = &root.event_ch,
         .error_ch = &root.error_ch,
@@ -429,7 +448,7 @@ pub fn newProcess(allocator: Allocator, parent: *Process, event_type: EventType,
     const process = try allocator.create(Process);
 
     process.* = Process{
-        .process_fn = func,
+        .process_fn = if (func) |f| @ptrCast(f) else null,
         .in_ch = Channel(Event).init(allocator, 10),
         .event_ch = parent.event_ch,
         .error_ch = parent.error_ch,
@@ -451,5 +470,12 @@ pub fn newProcess(allocator: Allocator, parent: *Process, event_type: EventType,
     // Register the process
     parent.processes.add(event_type, process);
 
+    return process;
+}
+
+/// Create a new process and track it in root for cleanup
+pub fn newTrackedProcess(allocator: Allocator, root: *RootProcess, parent: *Process, event_type: EventType, func: ?ETFunc) !*Process {
+    const process = try newProcess(allocator, parent, event_type, func);
+    root.trackProcess(process);
     return process;
 }
