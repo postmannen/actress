@@ -329,4 +329,4 @@ All communication is thread-safe using:
 ## License
 
 This implementation follows the same license as the original Go library.
-Based on the Go Actress library by Bjørn Tore Svinningen. 
+Based on the Go Actress library by Bjørn Tore Svinningen.
