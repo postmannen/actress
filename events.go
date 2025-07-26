@@ -29,7 +29,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/pkg/profile"
@@ -136,35 +135,14 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		for {
 			select {
-			case e := <-p.EventCh:
-				// Custom processes can take a little longer to start up and be
-				// registered in the map. We check here if process is registred,
-				// and it it is not we retry.
-				if _, ok := p.Processes.procMap[e.EventType]; !ok {
-					go func(ev Event) {
-						// Try to 3 times to deliver the message.
-						for i := 0; i < 3; i++ {
-							_, ok := p.Processes.procMap[e.EventType]
-
-							if !ok {
-								p.AddError(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
-								time.Sleep(time.Millisecond * 1000)
-								continue
-							}
-
-							// Process is now registred, so we can safely put
-							//the event on the InCh of the process.
-							p.Processes.procMap[e.EventType].InCh <- e
-
-							return
-						}
-
-					}(e)
-					continue
+			case ev := <-p.EventCh:
+				// Check if process is registred and valid.
+				if _, ok := p.Processes.procMap[ev.EventType]; !ok {
+					p.AddError(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
 				}
 
 				// Process was registered. Deliver the event to the process InCh.
-				p.Processes.procMap[e.EventType].InCh <- e
+				p.Processes.procMap[ev.EventType].InCh <- ev
 
 			case <-ctx.Done():
 				p.AddError(Event{
