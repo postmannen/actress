@@ -346,118 +346,6 @@ func etExitFn(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-// Router for error events.
-const ERRouter EventType = "ERRouter"
-
-// Process function for routing and handling events.
-func erRouterFn(ctx context.Context, p *Process) func() {
-	fn := func() {
-		for {
-			select {
-			case e := <-p.ErrorCh:
-
-				p.ErrProcesses.procMap[e.EventType].InCh <- e
-
-			case <-ctx.Done():
-				// NB: Bevare of this one getting stuck if for example the error
-				// handling is down. Maybe add a timeout if blocking to long,
-				// and then send elsewhere if it becomes a problem.
-				p.AddError(Event{
-					EventType: ERLog,
-					Err:       fmt.Errorf("info: got ctx.Done"),
-				})
-			}
-		}
-	}
-
-	return fn
-}
-
-// Log errors.
-const ERLog EventType = "ERLog"
-
-func erLogFn(ctx context.Context, p *Process) func() {
-	fn := func() {
-		for {
-			select {
-			case er := <-p.InCh:
-
-				go func() {
-					log.Printf("error for logging received: %v\n", er.Err)
-				}()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}
-
-	return fn
-}
-
-// Log debug errors.
-const ERDebug EventType = "ERDebug"
-
-func erDebugFn(ctx context.Context, p *Process) func() {
-	fn := func() {
-		for {
-			select {
-			case er := <-p.InCh:
-
-				go func() {
-					log.Printf("error for debug logging received: %v\n", er.Err)
-				}()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}
-
-	return fn
-}
-
-// Log and exit system.
-const ERFatal EventType = "ERFatal"
-
-func erFatalFn(ctx context.Context, p *Process) func() {
-	fn := func() {
-		for {
-			select {
-			case er := <-p.InCh:
-
-				go func() {
-					log.Fatalf("error for fatal logging received: %v\n", er.Err)
-				}()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}
-
-	return fn
-}
-
-// Log and exit system.
-const ERTest EventType = "ERTest"
-
-func erTestFn(ctx context.Context, p *Process) func() {
-	fn := func() {
-		for {
-			select {
-			case er := <-p.InCh:
-
-				go func() {
-					drop := fmt.Sprintf("error for fatal logging received: %v\n", er.Err)
-					_ = drop
-				}()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}
-
-	return fn
-}
-
 // Handling pids within the system.
 // The structure of the ev.Cmd is a slice of string:
 // []string{"action","pid","process name"}
@@ -656,7 +544,7 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 						log.Fatalf("failed to unmarshal custom event data: %v\n", err)
 					}
 
-					NewProcess(ctx, *p, EventType(ce.Name), WrapperCustomCmd(ce.Cmd)).Act()
+					NewProcess(ctx, *p, EventType(ce.Name), etCustomCmdFn(ce.Cmd)).Act()
 					// DEBUG: Injecting an event for testing while developing.
 					// p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
 				}()
@@ -669,16 +557,8 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-// Wrapper around creating an etFunc. The use of this wrapper function is to insert
-// some predefined values into the cmd to be executed when a process for the eventType
-// is created. When an event later is reveived, the content of the Event.Cmd field is
-// appended to what is already defined there from earlier.
-// An example of this is that we define the content of the command to be executed when
-// the process is defined to contain []string{"/bin/bash","-c"}. When an event later
-// is received and handled by this function, the contend of the .Cmd field is appended
-// to the predefined fields, and will for example give a result to be executed like
-// []string{"/bin/bash","-c","ls -l|grep file.txt"}.
-func WrapperCustomCmd(command []string) func(ctx context.Context, p *Process) func() {
+// etCustomCmdFn, used with ETCustomEventFn to run the actual command of the custom event.
+func etCustomCmdFn(command []string) func(ctx context.Context, p *Process) func() {
 	fønk := func(ctx context.Context, p *Process) func() {
 		fn := func() {
 			for {
