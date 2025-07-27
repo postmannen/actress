@@ -17,6 +17,8 @@ package actress
 
 import (
 	"context"
+	"fmt"
+	"log"
 )
 
 // processes holds information about what process functions
@@ -89,4 +91,116 @@ func NewErrProcess(ctx context.Context, parentP Process, event EventType, fn ETF
 		p.fn = fn(ctx, &p)
 	}
 	return &p
+}
+
+// Router for error events.
+const ERRouter EventType = "ERRouter"
+
+// Process function for routing and handling events.
+func erRouterFn(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			select {
+			case e := <-p.ErrorCh:
+
+				p.ErrProcesses.procMap[e.EventType].InCh <- e
+
+			case <-ctx.Done():
+				// NB: Bevare of this one getting stuck if for example the error
+				// handling is down. Maybe add a timeout if blocking to long,
+				// and then send elsewhere if it becomes a problem.
+				p.AddError(Event{
+					EventType: ERLog,
+					Err:       fmt.Errorf("info: got ctx.Done"),
+				})
+			}
+		}
+	}
+
+	return fn
+}
+
+// Log errors.
+const ERLog EventType = "ERLog"
+
+func erLogFn(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			select {
+			case er := <-p.InCh:
+
+				go func() {
+					log.Printf("error for logging received: %v\n", er.Err)
+				}()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	return fn
+}
+
+// Log debug errors.
+const ERDebug EventType = "ERDebug"
+
+func erDebugFn(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			select {
+			case er := <-p.InCh:
+
+				go func() {
+					log.Printf("error for debug logging received: %v\n", er.Err)
+				}()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	return fn
+}
+
+// Log and exit system.
+const ERFatal EventType = "ERFatal"
+
+func erFatalFn(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			select {
+			case er := <-p.InCh:
+
+				go func() {
+					log.Fatalf("error for fatal logging received: %v\n", er.Err)
+				}()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	return fn
+}
+
+// Log and exit system.
+const ERTest EventType = "ERTest"
+
+func erTestFn(ctx context.Context, p *Process) func() {
+	fn := func() {
+		for {
+			select {
+			case er := <-p.InCh:
+
+				go func() {
+					drop := fmt.Sprintf("error for fatal logging received: %v\n", er.Err)
+					_ = drop
+				}()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	return fn
 }

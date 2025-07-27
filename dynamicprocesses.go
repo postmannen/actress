@@ -128,7 +128,7 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 			case e := <-p.DynCh:
 				// Dynamic processes can take a little longer to start up and be
 				// registered in the map. We check here if process is registred,
-				// and it it is not we retry.
+				// and if it is not we retry.
 				if _, ok := p.DynProcesses.procMap[e.EventType]; !ok {
 					go func(ev Event) {
 						// Try to 3 times to deliver the message.
