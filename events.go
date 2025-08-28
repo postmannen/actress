@@ -75,9 +75,9 @@ type Event struct {
 	// The receiving process should check this field for what kind of event
 	// to create as the next step in the workflow.
 	NextEvent *Event `json:"event" yaml:"event"`
-	// Dst node
+	// Dst node.
 	Dst Node `json:"dst" yaml:"dst"`
-	// Src node
+	// Src node.
 	Src Node `json:"src" yaml:"src"`
 }
 
