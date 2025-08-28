@@ -74,7 +74,9 @@ type Event struct {
 	// NextEvent defines a series of events to be executed like a workflow.
 	// The receiving process should check this field for what kind of event
 	// to create as the next step in the workflow.
-	NextEvent *Event `json:"event" yaml:"event"`
+	NextEvent *Event `json:"nextEvent" yaml:"nextEvent"`
+	// PreviousEvent allows for keeping information about the previous event if needed.
+	PreviousEvent *Event `json:"previousEvent" yaml:"previousEvent"`
 	// Dst node.
 	Dst Node `json:"dst" yaml:"dst"`
 	// Src node.
