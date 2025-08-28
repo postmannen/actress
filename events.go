@@ -61,6 +61,9 @@ type Event struct {
 	// Cmd is usually used for giving instructions or parameters for
 	// what an event shall do.
 	Cmd []string `json:"cmd" yaml:"cmd"`
+	// Args are similar to Cmd, but the parameters can be stored in
+	// a hashmap as key/value items.
+	Args map[string]string
 	// Data usually carries the data from one process to the next. Example
 	// could be a file read on process1 is put in the Data field, and
 	// passed on to process2 to be unmarshaled.
