@@ -63,7 +63,7 @@ type Event struct {
 	Cmd []string `json:"cmd" yaml:"cmd"`
 	// Args are similar to Cmd, but the parameters can be stored in
 	// a hashmap as key/value items.
-	Args map[string]string
+	Args map[string]string `json:"args" yaml:"args"`
 	// Data usually carries the data from one process to the next. Example
 	// could be a file read on process1 is put in the Data field, and
 	// passed on to process2 to be unmarshaled.
