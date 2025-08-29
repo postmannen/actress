@@ -34,7 +34,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil)
+	rootAct := actress.NewRootProcess(ctx, nil, "testNode")
 
 	// etHttpGetFn will reveive the event, do some processing with it.
 	// An EventRW will then be create from the Event, and it's Read and

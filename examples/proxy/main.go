@@ -219,7 +219,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil)
+	rootAct := actress.NewRootProcess(ctx, nil, "testNode")
 
 	// Start all the registered actors.
 	err := rootAct.Act()

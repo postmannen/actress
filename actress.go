@@ -178,9 +178,9 @@ type Process struct {
 // The root process will also start up all the essential other
 // processes needed, like the event router, and various standard
 // error handling processes.
-func NewRootProcess(ctx context.Context, fn ETFunc) *Process {
+func NewRootProcess(ctx context.Context, fn ETFunc, nodeName Node) *Process {
 	ctx, cancel := context.WithCancel(ctx)
-	conf := NewConfig()
+	conf := NewConfig(nodeName)
 
 	p := Process{
 		fn:           nil,

@@ -15,7 +15,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil)
+	rootAct := actress.NewRootProcess(ctx, nil, "testNode")
 	// Create a test channel where we receive the end result.
 	testCh := make(chan string)
 

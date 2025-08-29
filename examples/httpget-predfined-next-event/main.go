@@ -31,7 +31,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil)
+	rootAct := actress.NewRootProcess(ctx, nil, "testNode")
 
 	const ETHttpGet actress.EventType = "ETHttpGet"
 	const ETWriteToFile actress.EventType = "ETWriteToFile"
