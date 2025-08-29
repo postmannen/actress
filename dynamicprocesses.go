@@ -123,9 +123,14 @@ const EDRouter EventType = "EDRouter"
 // and route the event to the correct process.
 func edRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		eventNr := 0
+
 		for {
 			select {
 			case e := <-p.DynCh:
+				eventNr++
+				e.Nr = eventNr
+
 				// Dynamic processes can take a little longer to start up and be
 				// registered in the map. We check here if process is registred,
 				// and if it is not we retry.

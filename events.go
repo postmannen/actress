@@ -138,9 +138,14 @@ const ETRouter EventType = "ETRouter"
 // and route the event to the correct process.
 func etRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		eventNr := 0
+
 		for {
 			select {
 			case ev := <-p.EventCh:
+				eventNr++
+				ev.Nr = eventNr
+
 				// Check if process is registred and valid.
 				if _, ok := p.Processes.procMap[ev.EventType]; !ok {
 					p.AddError(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})

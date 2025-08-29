@@ -99,9 +99,13 @@ const ERRouter EventType = "ERRouter"
 // Process function for routing and handling events.
 func erRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		eventNr := 0
+
 		for {
 			select {
 			case e := <-p.ErrorCh:
+				eventNr++
+				e.Nr = eventNr
 
 				p.ErrProcesses.procMap[e.EventType].InCh <- e
 
