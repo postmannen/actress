@@ -40,7 +40,9 @@ func etNatsClientFunc(ctx context.Context, p *ac.Process) func() {
 			nats.MaxReconnects(-1),
 		)
 		if err != nil {
-			p.AddError(ac.Event{EventType: ac.ERFatal, Err: fmt.Errorf("error: nats.Connect failed, %vn", err)})
+			p.AddEvent(ac.Event{EventType: ac.ERFatal,
+				EventKind: ac.EventKindError,
+				Err:       fmt.Errorf("error: nats.Connect failed, %vn", err)})
 
 		}
 		defer conn.Close()
@@ -52,11 +54,15 @@ func etNatsClientFunc(ctx context.Context, p *ac.Process) func() {
 					sub, err := conn.QueueSubscribe(NatsSubject, NatsSubject, func(msg *nats.Msg) {
 						p.AddEvent(ac.Event{
 							EventType: ac.ETPrint,
+							EventKind: ac.EventKindStatic,
 							Data:      []byte(fmt.Sprintf("* nats: got message on subject %v, payload: %v", msg.Subject, string(msg.Data))),
 						})
 					})
 					if err != nil {
-						p.AddError(ac.Event{Err: fmt.Errorf("error: failed to nats.QueueSubscribe: %v", err)})
+						p.AddEvent(ac.Event{
+							EventType: ac.ERFatal,
+							EventKind: ac.EventKindError,
+							Err:       fmt.Errorf("error: failed to nats.QueueSubscribe: %v", err)})
 					}
 					defer sub.Unsubscribe()
 					<-ctx.Done()
@@ -78,7 +84,9 @@ func etNatsClientFunc(ctx context.Context, p *ac.Process) func() {
 							//fmt.Printf("********* GOT EVENT: %v\n", ev)
 							err := conn.Publish(ev.Cmd[0], ev.Data)
 							if err != nil {
-								p.AddError(ac.Event{EventType: ac.ERFatal, Err: fmt.Errorf("error: failed to nats.Publish: %v", err)})
+								p.AddEvent(ac.Event{EventType: ac.ERFatal,
+									EventKind: ac.EventKindError,
+									Err:       fmt.Errorf("error: failed to nats.Publish: %v", err)})
 							}
 						}()
 					case <-ctx.Done():
@@ -89,8 +97,8 @@ func etNatsClientFunc(ctx context.Context, p *ac.Process) func() {
 			return fn
 		}
 
-		ac.NewProcess(ctx, *p, ETNatsSub, subFn).Act()
-		ac.NewProcess(ctx, *p, ETNatsPub, pubFn).Act()
+		ac.NewProcess(ctx, p, ETNatsSub, subFn).Act()
+		ac.NewProcess(ctx, p, ETNatsPub, pubFn).Act()
 
 		<-ctx.Done()
 	}
@@ -103,7 +111,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := ac.NewRootProcess(ctx, nil, "testNode")
+	rootAct := ac.NewRootProcess(ctx, nil)
 	err := rootAct.Act()
 	if err != nil {
 		log.Fatal(err)
@@ -112,6 +120,7 @@ func main() {
 	// Start up a Nats-server using the ETOsCmd EventType.
 	rootAct.AddEvent(ac.Event{
 		EventType: ac.ETOsCmd,
+		EventKind: ac.EventKindStatic,
 		Cmd:       []string{"/bin/bash", "-c", "docker run --rm -p 4222:4222 -i nats:latest"},
 		NextEvent: &ac.Event{EventType: ac.ETPrint}})
 
@@ -119,7 +128,7 @@ func main() {
 	time.Sleep(time.Second * 2)
 
 	// Create a nats client process.
-	err = ac.NewProcess(ctx, *rootAct, ETNatsClient, etNatsClientFunc).Act()
+	err = ac.NewProcess(ctx, rootAct, ETNatsClient, etNatsClientFunc).Act()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -129,6 +138,7 @@ func main() {
 	for {
 		rootAct.AddEvent(ac.Event{
 			EventType: ETNatsPub,
+			EventKind: ac.EventKindStatic,
 			Cmd:       []string{NatsSubject},
 			Data:      []byte(fmt.Sprintf("some data that was put in here: %v", nr)),
 		})

@@ -65,11 +65,11 @@ func newErrProcesses() *errProcesses {
 
 // NewErrProcess will prepare and return a *Process. It will copy
 // channels and map structures from the root process.
-func NewErrProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc) *Process {
+func NewErrProcess(ctx context.Context, parentP *Process, event EventType, fn ETFunc) *Process {
 	ctx, cancel := context.WithCancel(ctx)
 	p := Process{
 		fn:           nil,
-		InCh:         make(chan Event, 1),
+		InCh:         make(chan Event),
 		EventCh:      parentP.EventCh,
 		ErrorCh:      parentP.ErrorCh,
 		TestCh:       parentP.TestCh,
@@ -104,6 +104,15 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 		for {
 			select {
 			case e := <-p.ErrorCh:
+				// If there is a next event defined, we make a copy of all the fields  of the current event,
+				// and put that as the previousEvent on the next event. We can use this information later
+				// if need to check something in the previous event.
+				if e.NextEvent != nil {
+					// Keep the information about the current event, so we are able to check for things
+					// like ackTimeout and what node to reply back to if ack should be given.
+					e.NextEvent.PreviousEvent = CopyEventFields(e)
+				}
+
 				eventNr++
 				e.Nr = eventNr
 
@@ -113,8 +122,9 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 				// NB: Bevare of this one getting stuck if for example the error
 				// handling is down. Maybe add a timeout if blocking to long,
 				// and then send elsewhere if it becomes a problem.
-				p.AddError(Event{
+				p.AddEvent(Event{
 					EventType: ERLog,
+					EventKind: EventKindError,
 					Err:       fmt.Errorf("info: got ctx.Done"),
 				})
 			}

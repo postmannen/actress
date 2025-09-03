@@ -31,7 +31,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil, "testNode")
+	rootAct := actress.NewRootProcess(ctx, nil)
 
 	const ETHttpGet actress.EventType = "ETHttpGet"
 	const ETWriteToFile actress.EventType = "ETWriteToFile"
@@ -57,7 +57,9 @@ func main() {
 							log.Fatalf("http body close failed: %v\n", err)
 						}
 
-						p.AddEvent(actress.Event{EventType: ev.NextEvent.EventType, Data: b})
+						p.AddEvent(actress.Event{EventType: ev.NextEvent.EventType,
+							EventKind: ev.NextEvent.EventKind,
+							Data:      b})
 					}()
 
 				case <-ctx.Done():
@@ -97,8 +99,8 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, *rootAct, ETWriteToFile, WriteToFileFunc).Act()
-	actress.NewProcess(ctx, *rootAct, ETHttpGet, httpGetFunc).Act()
+	actress.NewProcess(ctx, rootAct, ETWriteToFile, WriteToFileFunc).Act()
+	actress.NewProcess(ctx, rootAct, ETHttpGet, httpGetFunc).Act()
 
 	// Add an event, and also specify the next event to add so we can
 	// do a httpget first in the first process, then send the result
@@ -106,9 +108,11 @@ func main() {
 	// to a file.
 	rootAct.AddEvent(actress.Event{
 		EventType: ETHttpGet,
+		EventKind: actress.EventKindStatic,
 		Cmd:       []string{"http://vg.no"},
 		NextEvent: &actress.Event{
 			EventType: ETWriteToFile,
+			EventKind: actress.EventKindStatic,
 		}})
 	// Receive and print the result.
 

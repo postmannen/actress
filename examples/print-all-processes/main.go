@@ -29,7 +29,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil, "testNode")
+	rootAct := actress.NewRootProcess(ctx, nil)
 	rootAct.Act()
 
 	// Start all the registered actors.
@@ -39,14 +39,19 @@ func main() {
 	}
 
 	rootAct.AddEvent(actress.Event{EventType: actress.ETPidGetAll,
+		EventKind: actress.EventKindStatic,
 		NextEvent: &actress.Event{
-			EventType: actress.ETTestCh},
+			EventType: actress.ETTestCh,
+			EventKind: actress.EventKindStatic},
 	},
 	)
 
 	ev := <-rootAct.TestCh
 	tmpProc := make(actress.PidVsProcMap)
 	err = json.Unmarshal(ev.Data, &tmpProc)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	for k, v := range tmpProc {
 		fmt.Printf("pid: %v, process: %v\n", k, v)

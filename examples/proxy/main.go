@@ -41,7 +41,7 @@ func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 				listenerET := evGetInit.Cmd[1]
 				thisET := evGetInit.Cmd[2]
 
-				actress.NewDynProcess(ctx, *p, actress.EventType(thisET), func(ctx context.Context, p *actress.Process) func() {
+				actress.NewDynProcess(ctx, p, actress.EventType(thisET), func(ctx context.Context, p *actress.Process) func() {
 					return func() {
 						timeout := 5
 						ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
@@ -84,7 +84,9 @@ func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 							ccn, cce := destConn.Read(b)
 							log.Printf("READ destConn, n: %v, err: %v, %v\n", ccn, err, thisET)
 							if ccn > 0 {
-								p.AddDynEvent(actress.Event{EventType: actress.EventType(listenerET), Data: b[:ccn]})
+								p.AddEvent(actress.Event{EventType: actress.EventType(listenerET),
+									EventKind: actress.EventKindDynamic,
+									Data:      b[:ccn]})
 								log.Printf("AFTER READING destConn, n: %v, and AFTER sending event, %v\n", ccn, thisET)
 							}
 							if cce != nil {
@@ -123,6 +125,7 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 
 			p.AddEvent(actress.Event{
 				EventType: ETHttpGet,
+				EventKind: actress.EventKindStatic,
 				Cmd:       cmd,
 			})
 			log.Printf("Added Event to start up remote http get'er: %v\n", cmd)
@@ -138,7 +141,7 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			}
 
-			actress.NewDynProcess(ctx, *p, actress.EventType(listenerET), func(ctx context.Context, p *actress.Process) func() {
+			actress.NewDynProcess(ctx, p, actress.EventType(listenerET), func(ctx context.Context, p *actress.Process) func() {
 				return func() {
 					// Event ET2 <- clientConn
 					go func() {
@@ -157,7 +160,9 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 							log.Printf("AFTER READING clientConn, n: %v, %v\n", ccn, listenerET)
 							//if ccn > 0 {
 
-							p.AddDynEvent(actress.Event{EventType: actress.EventType(geterET), Data: b[:ccn]})
+							p.AddEvent(actress.Event{EventType: actress.EventType(geterET),
+								EventKind: actress.EventKindDynamic,
+								Data:      b[:ccn]})
 							log.Printf("AFTER READING clientConn, n: %v, and AFTER sending event, %v\n", ccn, listenerET)
 
 							//}
@@ -219,7 +224,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil, "testNode")
+	rootAct := actress.NewRootProcess(ctx, nil)
 
 	// Start all the registered actors.
 	err := rootAct.Act()
@@ -228,8 +233,8 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, *rootAct, ETHttpGet, etHttpGetFn).Act()
-	actress.NewProcess(ctx, *rootAct, ETProxyListener, etProxyListenerFn).Act()
+	actress.NewProcess(ctx, rootAct, ETHttpGet, etHttpGetFn).Act()
+	actress.NewProcess(ctx, rootAct, ETProxyListener, etProxyListenerFn).Act()
 
 	//rootAct.AddEvent(actress.Event{EventType: ETHttpGet, Cmd: []string{"http://vg.no"}})
 	// Receive and print the result.

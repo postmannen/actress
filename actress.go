@@ -17,6 +17,7 @@ package actress
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 )
@@ -178,17 +179,17 @@ type Process struct {
 // The root process will also start up all the essential other
 // processes needed, like the event router, and various standard
 // error handling processes.
-func NewRootProcess(ctx context.Context, fn ETFunc, nodeName Node) *Process {
+func NewRootProcess(ctx context.Context, fn ETFunc) *Process {
 	ctx, cancel := context.WithCancel(ctx)
-	conf := NewConfig(nodeName)
+	conf := NewConfig()
 
 	p := Process{
 		fn:           nil,
-		InCh:         make(chan Event, 1),
-		EventCh:      make(chan Event, 1),
-		ErrorCh:      make(chan Event, 1),
-		TestCh:       make(chan Event, 1),
-		DynCh:        make(chan Event, 1),
+		InCh:         make(chan Event),
+		EventCh:      make(chan Event),
+		ErrorCh:      make(chan Event),
+		TestCh:       make(chan Event),
+		DynCh:        make(chan Event),
 		Event:        ETRoot,
 		Processes:    newProcesses(),
 		DynProcesses: newDynProcesses(),
@@ -208,43 +209,48 @@ func NewRootProcess(ctx context.Context, fn ETFunc, nodeName Node) *Process {
 	// Register and start all the standard child processes
 	// that should spawn off the root process
 
-	NewProcess(ctx, p, ETProfiling, etProfilingFn).Act()
+	NewProcess(ctx, &p, ETProfiling, etProfilingFn).Act()
 
 	if p.Config.CustomEvents {
-		NewProcess(ctx, p, ETCustomEvent, ETCustomEventFn).Act()
-		NewProcess(ctx, p, ETWatchEventFile, wrapperETWatchEventFileFn(p.Config.CustomEventsPath, ".json")).Act()
+		NewProcess(ctx, &p, ETCustomEvent, ETCustomEventFn).Act()
+		NewProcess(ctx, &p, ETWatchEventFile, wrapperETWatchEventFileFn(p.Config.CustomEventsPath, ".json")).Act()
 	}
 
-	NewProcess(ctx, p, ETRouter, etRouterFn).Act()
-	NewProcess(ctx, p, ETOsSignal, etOsSignalFn).Act()
-	NewProcess(ctx, p, ETTestCh, etTestChFn).Act()
-	NewProcess(ctx, p, ETPid, etPidFn).Act()
-	NewProcess(ctx, p, ETReadFile, ETReadFileFn).Act()
-	NewProcess(ctx, p, ETOsCmd, etOsCmdFn).Act()
+	// Starting up the routers first.
+	NewProcess(ctx, &p, ETRouter, etRouterFn).Act()
+	NewErrProcess(ctx, &p, ERRouter, erRouterFn).Act()
+	NewDynProcess(ctx, &p, EDRouter, edRouterFn).Act()
 
-	NewProcess(ctx, p, ETDone, etDoneFn).Act()
-	NewProcess(ctx, p, ETPrint, etPrintFn).Act()
-	NewProcess(ctx, p, ETExit, etExitFn).Act()
-	NewProcess(ctx, p, ETPidGetAll, etPidGetAllFn).Act()
+	// Starting error handling processes.
+	NewErrProcess(ctx, &p, ERLog, erLogFn).Act()
+	NewErrProcess(ctx, &p, ERDebug, erDebugFn).Act()
+	NewErrProcess(ctx, &p, ERFatal, erFatalFn).Act()
+	NewErrProcess(ctx, &p, ERTest, erTestFn).Act()
+	NewProcess(ctx, &p, ETPrint, etPrintFn).Act()
 
-	NewDynProcess(ctx, p, EDRouter, edRouterFn).Act()
+	// Starting the remainding processes.
+	NewProcess(ctx, &p, ETOsSignal, etOsSignalFn).Act()
+	NewProcess(ctx, &p, ETTestCh, etTestChFn).Act()
+	NewProcess(ctx, &p, ETPid, etPidFn).Act()
+	NewProcess(ctx, &p, ETReadFile, ETReadFileFn).Act()
+	NewProcess(ctx, &p, ETOsCmd, etOsCmdFn).Act()
 
-	NewErrProcess(ctx, p, ERRouter, erRouterFn).Act()
-	NewErrProcess(ctx, p, ERLog, erLogFn).Act()
-	NewErrProcess(ctx, p, ERDebug, erDebugFn).Act()
-	NewErrProcess(ctx, p, ERFatal, erFatalFn).Act()
-	NewErrProcess(ctx, p, ERTest, erTestFn).Act()
+	NewProcess(ctx, &p, ETDone, etDoneFn).Act()
+	NewProcess(ctx, &p, ETExit, etExitFn).Act()
+	NewProcess(ctx, &p, ETPidGetAll, etPidGetAllFn).Act()
+
+	NewDynProcess(ctx, &p, EDRouter, edRouterFn).Act()
 
 	return &p
 }
 
 // NewProcess will prepare and return a *Process. It will copy
 // channels and map structures from the root process.
-func NewProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc) *Process {
+func NewProcess(ctx context.Context, parentP *Process, event EventType, fn ETFunc) *Process {
 	ctx, cancel := context.WithCancel(ctx)
 	p := Process{
 		fn:           nil,
-		InCh:         make(chan Event, 1),
+		InCh:         make(chan Event),
 		EventCh:      parentP.EventCh,
 		ErrorCh:      parentP.ErrorCh,
 		TestCh:       parentP.TestCh,
@@ -268,22 +274,43 @@ func NewProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc
 	return &p
 }
 
-// Will add an event to be handled by the processes.
+// AddEvent will deliver the event to the correct router based
+// on the specified EventKind of the Event.
+// If the EventKind are missing the event will be handled as a static
+// event.
 func (p *Process) AddEvent(event Event) {
+	switch event.EventKind {
+	case EventKindStatic:
+		p.addEventStatic(event)
+	case EventKindError:
+		p.addEventError(event)
+	case EventKindDynamic:
+		p.addEventDynamic(event)
+	default:
+		panic(fmt.Sprintf("unknown EventKind: %v", event.EventKind))
+	}
+}
+
+// Will add an event to be handled by the processes.
+func (p *Process) addEventStatic(event Event) {
 	p.EventCh <- event
 }
 
 // Will add an event to be handled by the processes.
-func (p *Process) AddDynEvent(event Event) {
+func (p *Process) addEventDynamic(event Event) {
 	p.DynCh <- event
 }
 
 // Will add an error to be handled by the error processes.
-func (p *Process) AddError(event Event) {
+func (p *Process) addEventError(event Event) {
 	p.ErrorCh <- event
 }
 
-// Will start the current process.
+// Will start the ETFunc attacched to the process.
+//
+// If no ETFunc is defined for the process will just return
+// after calling this function. The process can still be used
+// and we can communicate with it via it's channels.
 func (p *Process) Act() error {
 	log.Printf("Starting actor for EventType: %v\n", p.Event)
 	if p.fn == nil {

@@ -15,7 +15,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil, "testNode")
+	rootAct := actress.NewRootProcess(ctx, nil)
 	rootAct.Act()
 
 	// Create a test channel where we receive the end result.
@@ -51,7 +51,7 @@ func main() {
 
 						return fn
 					}
-					actress.NewProcess(ctx, *p, ETTest2, test2Func).Act()
+					actress.NewProcess(ctx, p, ETTest2, test2Func).Act()
 
 					upper := strings.ToUpper(string(result.Data))
 					p.EventCh <- actress.Event{EventType: ETTest2, Data: []byte(upper)}
@@ -66,7 +66,7 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, *rootAct, ETTest1, test1Func).Act()
+	actress.NewProcess(ctx, rootAct, ETTest1, test1Func).Act()
 
 	// Start all the registered actors.
 	err := rootAct.Act()
@@ -77,7 +77,9 @@ func main() {
 	// Add and pass in an event that will be picked up by the actor
 	// registered for the ETTest1 EventType, and add "test" to the
 	// data field of the event.
-	rootAct.AddEvent(actress.Event{EventType: ETTest1, Data: []byte("test")})
+	rootAct.AddEvent(actress.Event{EventType: ETTest1,
+		EventKind: actress.EventKindStatic,
+		Data:      []byte("test")})
 	// Receive and print the result.
 	fmt.Printf("The result: %v\n", <-testCh)
 

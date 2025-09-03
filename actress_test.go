@@ -17,10 +17,11 @@ package actress
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"testing"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 func TestEventProcs(t *testing.T) {
@@ -46,15 +47,17 @@ func TestEventProcs(t *testing.T) {
 		return fn
 	}
 
-	rootp := NewRootProcess(ctx, nil, "testNode")
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	NewProcess(ctx, *rootp, ETTest, tFunc).Act()
+	NewProcess(ctx, rootp, ETTest, tFunc).Act()
 
-	rootp.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
+	rootp.AddEvent(Event{EventType: ETTest,
+		EventKind: EventKindStatic,
+		Data:      []byte("test")})
 	if r := <-testCh; r != "test" {
 		t.Fatalf("ETTest failed\n")
 	}
@@ -83,15 +86,17 @@ func TestDynamicProcess(t *testing.T) {
 		return fn
 	}
 
-	rootp := NewRootProcess(ctx, nil, "testNode")
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	NewDynProcess(ctx, *rootp, EDTest, tFunc).Act()
+	NewDynProcess(ctx, rootp, EDTest, tFunc).Act()
 
-	rootp.AddDynEvent(Event{EventType: EDTest, Data: []byte("test")})
+	rootp.AddEvent(Event{EventType: EDTest,
+		EventKind: EventKindDynamic,
+		Data:      []byte("test")})
 	if r := <-testCh; r != "test" {
 		t.Fatalf("EDTest failed\n")
 	}
@@ -121,13 +126,15 @@ func TestDynamicProcess2(t *testing.T) {
 					t.Logf("\ndyn1EVType: %v\ndyn2EVType: %v\n", dyn1EVType, dyn2EVType)
 
 					// Define and start the process for dyn2EVType.
-					NewDynProcess(ctx, *p, EventType(dyn2EVType),
+					NewDynProcess(ctx, p, EventType(dyn2EVType),
 						func(ctx context.Context, p *Process) func() {
 							return func() {
 								select {
 								case <-p.InCh:
 									// Send an event to the dyn1EVType process.
-									p.AddDynEvent(Event{EventType: EventType(dyn1EVType), Data: []byte("from dyn2")})
+									p.AddEvent(Event{EventType: EventType(dyn1EVType),
+										EventKind: EventKindDynamic,
+										Data:      []byte("from dyn2")})
 
 									// We are now done with the dyn2EVType process so we delete it.
 									p.DynProcesses.Delete(EventType(dyn2EVType))
@@ -147,13 +154,13 @@ func TestDynamicProcess2(t *testing.T) {
 		return fn
 	}
 
-	rootp := NewRootProcess(ctx, nil, "testNode")
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	NewDynProcess(ctx, *rootp, EDTest, tFunc).Act()
+	NewDynProcess(ctx, rootp, EDTest, tFunc).Act()
 
 	// Create UUID's to be used for EventType's for the dynamic processes.
 	// We put them in the .Cmd field of EDTest so the receiver also know
@@ -161,10 +168,11 @@ func TestDynamicProcess2(t *testing.T) {
 	dyn1EVType := NewUUID()
 	dyn2EVType := NewUUID()
 
-	NewDynProcess(ctx, *rootp, EventType(dyn1EVType),
+	NewDynProcess(ctx, rootp, EventType(dyn1EVType),
 		func(ctx context.Context, p *Process) func() {
 			return func() {
-				p.AddDynEvent(Event{EventType: EventType(dyn2EVType)})
+				p.AddEvent(Event{EventType: EventType(dyn2EVType),
+					EventKind: EventKindDynamic})
 
 				select {
 				case ev := <-p.InCh:
@@ -175,7 +183,9 @@ func TestDynamicProcess2(t *testing.T) {
 			}
 		}).Act()
 
-	rootp.AddDynEvent(Event{EventType: EDTest, Cmd: []string{"", dyn1EVType, dyn2EVType}, Data: []byte("test")})
+	rootp.AddEvent(Event{EventType: EDTest,
+		EventKind: EventKindDynamic,
+		Cmd:       []string{"", dyn1EVType, dyn2EVType}, Data: []byte("test")})
 
 	if r := <-testCh; r != "from dyn2" {
 		t.Fatalf("EDTest failed\n")
@@ -192,7 +202,7 @@ func TestDynamicProcessReaderWriter(t *testing.T) {
 	// Test channel for receiving the final result.
 	testCh := make(chan string)
 
-	rootp := NewRootProcess(ctx, nil, "testNode")
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
@@ -214,18 +224,18 @@ func TestDynamicProcessReaderWriter(t *testing.T) {
 					t.Logf("\ndyn1EVType: %v\ndyn2EVType: %v\n", dyn1EVType, dyn2EVType)
 
 					// Define and start the process for dyn2EVType.
-					NewDynProcess(ctx, *p, EventType(dyn2EVType),
+					NewDynProcess(ctx, p, EventType(dyn2EVType),
 						func(ctx context.Context, p *Process) func() {
 							return func() {
 								select {
 								case <-p.InCh:
 									// Send an event to the dyn1EVType process.
-									tmpEv := Event{EventType: EventType(dyn1EVType)}
+									tmpEv := Event{EventType: EventType(dyn1EVType), EventKind: EventKindDynamic}
 
 									erw := NewEventRW(p, &tmpEv, "in dyn2EVType reader writer")
 									erw.Write([]byte("from dyn2"))
 
-									p.AddDynEvent(tmpEv)
+									p.AddEvent(tmpEv)
 
 									// We are now done with the dyn2EVType process so we delete it.
 									p.DynProcesses.Delete(EventType(dyn2EVType))
@@ -245,7 +255,7 @@ func TestDynamicProcessReaderWriter(t *testing.T) {
 		return fn
 	}
 
-	NewDynProcess(ctx, *rootp, EDTest, edTestFn).Act()
+	NewDynProcess(ctx, rootp, EDTest, edTestFn).Act()
 
 	// Create UUID's to be used for EventType's for the dynamic processes.
 	// We put them in the .Cmd field of EDTest so the receiver also know
@@ -253,10 +263,10 @@ func TestDynamicProcessReaderWriter(t *testing.T) {
 	dyn1EVType := NewUUID()
 	dyn2EVType := NewUUID()
 
-	NewDynProcess(ctx, *rootp, EventType(dyn1EVType),
+	NewDynProcess(ctx, rootp, EventType(dyn1EVType),
 		func(ctx context.Context, p *Process) func() {
 			return func() {
-				p.AddDynEvent(Event{EventType: EventType(dyn2EVType)})
+				p.AddEvent(Event{EventType: EventType(dyn2EVType), EventKind: EventKindDynamic})
 
 				select {
 				case ev := <-p.InCh:
@@ -273,7 +283,7 @@ func TestDynamicProcessReaderWriter(t *testing.T) {
 			}
 		}).Act()
 
-	rootp.AddDynEvent(Event{EventType: EDTest, Cmd: []string{"", dyn1EVType, dyn2EVType}, Data: []byte("test")})
+	rootp.AddEvent(Event{EventType: EDTest, EventKind: EventKindDynamic, Cmd: []string{"", dyn1EVType, dyn2EVType}, Data: []byte("test")})
 
 	if r := <-testCh; r != "from dyn2" {
 		t.Fatalf("EDTest failed\n")
@@ -286,7 +296,7 @@ func TestNextEventProcs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rootp := NewRootProcess(ctx, nil, "testNode")
+	rootp := NewRootProcess(ctx, nil)
 
 	testCh := make(chan string)
 	const ETTest EventType = "ETTest"
@@ -306,7 +316,7 @@ func TestNextEventProcs(t *testing.T) {
 		return fn
 	}
 
-	NewProcess(ctx, *rootp, ETTest, testFunc).Act()
+	NewProcess(ctx, rootp, ETTest, testFunc).Act()
 
 	const ETNextEvent EventType = "ETNextEvent"
 
@@ -328,7 +338,7 @@ func TestNextEventProcs(t *testing.T) {
 		return fn
 	}
 
-	NewProcess(ctx, *rootp, ETNextEvent, nextEventFunc).Act()
+	NewProcess(ctx, rootp, ETNextEvent, nextEventFunc).Act()
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
@@ -336,6 +346,7 @@ func TestNextEventProcs(t *testing.T) {
 
 	rootp.AddEvent(Event{
 		EventType: ETNextEvent,
+		EventKind: EventKindStatic,
 		Data:      []byte("test"),
 		NextEvent: &Event{EventType: ETTest}})
 	if r := <-testCh; r != "test" {
@@ -364,18 +375,22 @@ func TestPidToProcMap(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rootp := NewRootProcess(ctx, nil, "testNode")
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rootp.AddEvent(Event{EventType: ETPidGetAll, NextEvent: &Event{EventType: ETTestCh}})
+	rootp.AddEvent(Event{EventType: ETPidGetAll,
+		EventKind: EventKindStatic,
+		NextEvent: &Event{EventType: ETTestCh,
+			EventKind: EventKindStatic,
+		}})
 
 	ev := <-rootp.TestCh
 	mapFromEv := make(PidVsProcMap)
 
-	err = json.Unmarshal(ev.Data, &mapFromEv)
+	err = cbor.Unmarshal(ev.Data, &mapFromEv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,15 +441,15 @@ func BenchmarkSingleProcess(b *testing.B) {
 		return fn
 	}
 
-	rootp := NewRootProcess(ctx, nil, "testNode")
-	NewProcess(ctx, *rootp, ETTest, tFunc).Act()
+	rootp := NewRootProcess(ctx, nil)
+	NewProcess(ctx, rootp, ETTest, tFunc).Act()
 	err := rootp.Act()
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	for n := 0; n < b.N; n++ {
-		rootp.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
+		rootp.AddEvent(Event{EventType: ETTest, EventKind: EventKindStatic, Data: []byte("test")})
 		if r := <-testCh; r != "test" {
 			b.Fatalf("ETTest failed\n")
 		}
@@ -466,16 +481,20 @@ func BenchmarkSingleProcessEventAndError(b *testing.B) {
 		return fn
 	}
 
-	rootp := NewRootProcess(ctx, nil, "testNode")
+	rootp := NewRootProcess(ctx, nil)
 	err := rootp.Act()
 	if err != nil {
 		b.Fatal(err)
 	}
-	NewProcess(ctx, *rootp, ETTest, tFunc).Act()
+	NewProcess(ctx, rootp, ETTest, tFunc).Act()
 
 	for n := 0; n < b.N; n++ {
-		rootp.AddEvent(Event{EventType: ETTest, Data: []byte("test")})
-		rootp.ErrorCh <- Event{EventType: ERTest, Err: fmt.Errorf("some error:%v", "apekatt")}
+		rootp.AddEvent(Event{EventType: ETTest,
+			EventKind: EventKindStatic,
+			Data:      []byte("test")})
+		rootp.ErrorCh <- Event{EventType: ERTest,
+			EventKind: EventKindError,
+			Err:       fmt.Errorf("some error:%v", "apekatt")}
 		if r := <-testCh; r != "test" {
 			b.Fatalf("ETTest failed\n")
 		}
@@ -487,7 +506,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rootp := NewRootProcess(ctx, nil, "testNode")
+	rootp := NewRootProcess(ctx, nil)
 
 	testCh := make(chan string)
 
@@ -510,7 +529,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 		return fn
 	}
 
-	NewProcess(ctx, *rootp, ETTest1, tFunc1).Act()
+	NewProcess(ctx, rootp, ETTest1, tFunc1).Act()
 
 	tFunc2 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
@@ -528,7 +547,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 		return fn
 	}
 
-	NewProcess(ctx, *rootp, ETTest2, tFunc2).Act()
+	NewProcess(ctx, rootp, ETTest2, tFunc2).Act()
 
 	err := rootp.Act()
 	if err != nil {
@@ -536,7 +555,9 @@ func BenchmarkTwoProcesses(b *testing.B) {
 	}
 
 	for n := 0; n < b.N; n++ {
-		rootp.AddEvent(Event{EventType: ETTest1, Data: []byte("test")})
+		rootp.AddEvent(Event{EventType: ETTest1,
+			EventKind: EventKindStatic,
+			Data:      []byte("test")})
 		if r := <-testCh; r != "test" {
 			b.Fatalf("ETTest failed\n")
 		}
@@ -548,7 +569,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rootp := NewRootProcess(ctx, nil, "testNode")
+	rootp := NewRootProcess(ctx, nil)
 
 	testCh := make(chan string)
 
@@ -571,7 +592,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 		return fn
 	}
 
-	NewProcess(ctx, *rootp, ETTest1, tFunc1).Act()
+	NewProcess(ctx, rootp, ETTest1, tFunc1).Act()
 
 	tFunc2 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
@@ -588,7 +609,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 		return fn
 	}
 
-	NewProcess(ctx, *rootp, ETTest2, tFunc2).Act()
+	NewProcess(ctx, rootp, ETTest2, tFunc2).Act()
 
 	tFunc3 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
@@ -606,7 +627,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 		return fn
 	}
 
-	NewProcess(ctx, *rootp, ETTest3, tFunc3).Act()
+	NewProcess(ctx, rootp, ETTest3, tFunc3).Act()
 
 	err := rootp.Act()
 	if err != nil {
@@ -614,7 +635,9 @@ func BenchmarkThreeProcesses(b *testing.B) {
 	}
 
 	for n := 0; n < b.N; n++ {
-		rootp.AddEvent(Event{EventType: ETTest1, Data: []byte("test")})
+		rootp.AddEvent(Event{EventType: ETTest1,
+			EventKind: EventKindStatic,
+			Data:      []byte("test")})
 		if r := <-testCh; r != "test" {
 			b.Fatalf("ETTest failed\n")
 		}

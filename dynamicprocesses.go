@@ -86,11 +86,11 @@ func NewUUID() string {
 // the dynamic processes have a mutex in processes map DynProcesses so
 // we also can delete the processes when they are no longer needed.
 
-func NewDynProcess(ctx context.Context, parentP Process, event EventType, fn ETFunc) *Process {
+func NewDynProcess(ctx context.Context, parentP *Process, event EventType, fn ETFunc) *Process {
 	ctx, cancel := context.WithCancel(ctx)
 	p := Process{
 		fn:           nil,
-		InCh:         make(chan Event, 1),
+		InCh:         make(chan Event),
 		EventCh:      parentP.EventCh,
 		ErrorCh:      parentP.ErrorCh,
 		TestCh:       parentP.TestCh,
@@ -128,6 +128,15 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 		for {
 			select {
 			case e := <-p.DynCh:
+				// If there is a next event defined, we make a copy of all the fields  of the current event,
+				// and put that as the previousEvent on the next event. We can use this information later
+				// if need to check something in the previous event.
+				if e.NextEvent != nil {
+					// Keep the information about the current event, so we are able to check for things
+					// like ackTimeout and what node to reply back to if ack should be given.
+					e.NextEvent.PreviousEvent = CopyEventFields(e)
+				}
+
 				eventNr++
 				e.Nr = eventNr
 
@@ -141,7 +150,9 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 							_, ok := p.DynProcesses.procMap[e.EventType]
 
 							if !ok {
-								p.AddError(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
+								p.AddEvent(Event{EventType: ERLog,
+									EventKind: EventKindError,
+									Err:       fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
 								time.Sleep(time.Millisecond * 1000)
 								continue
 							}
@@ -161,8 +172,9 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 				p.DynProcesses.procMap[e.EventType].InCh <- e
 
 			case <-ctx.Done():
-				p.AddError(Event{
+				p.AddEvent(Event{
 					EventType: ERLog,
+					EventKind: EventKindError,
 					Err:       fmt.Errorf("info: got ctx.Done"),
 				})
 

@@ -34,7 +34,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil, "testNode")
+	rootAct := actress.NewRootProcess(ctx, nil)
 
 	// etHttpGetFn will reveive the event, do some processing with it.
 	// An EventRW will then be create from the Event, and it's Read and
@@ -96,7 +96,9 @@ func main() {
 				// set so the reply event will be sent back to us. The Data field
 				// will be set and handled by the Write method when called.
 				erw := NewEventRW(p, &actress.Event{EventType: ETEventProcessor,
-					NextEvent: &actress.Event{EventType: ETEventCreator}})
+					EventKind: actress.EventKindStatic,
+					NextEvent: &actress.Event{EventType: ETEventCreator,
+						EventKind: actress.EventKindStatic}})
 
 				buf := bytes.NewBuffer([]byte{})
 				str := fmt.Sprintf("some data for event nr: %v", counter)
@@ -128,8 +130,8 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, *rootAct, ETEventProcessor, etEventProcessorFn).Act()
-	actress.NewProcess(ctx, *rootAct, ETEventCreator, etEventCreatorFn).Act()
+	actress.NewProcess(ctx, rootAct, ETEventProcessor, etEventProcessorFn).Act()
+	actress.NewProcess(ctx, rootAct, ETEventCreator, etEventCreatorFn).Act()
 
 	<-ctx.Done()
 }

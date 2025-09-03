@@ -31,14 +31,13 @@ type Config struct {
 
 // New config will check flags and env variables set, and prepare
 // and return the resulting *config.
-func NewConfig(nodeName Node) *Config {
+func NewConfig() *Config {
 	// The config with default values set.
 	c := Config{
 		Profiling:        "none",
 		CustomEvents:     false,
 		Metrics:          false,
 		CustomEventsPath: "customevents",
-		NodeName:         nodeName,
 	}
 
 	c.Profiling = CheckEnv("PROFILING", c.Profiling).(string)

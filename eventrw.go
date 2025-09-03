@@ -50,7 +50,7 @@ func (m *EventRW) Write(b []byte) (int, error) {
 		ev := m.Ev
 		ev.Data = b
 		// Todo: Make this one generic to cath both standard, custom, and dynamic event?
-		m.P.AddDynEvent(*ev)
+		m.P.AddEvent(*ev)
 		fmt.Printf(" *2 DEBUG WRITE: ev nr: %v, info: %v , eventType: %v, DONE Writing to erw, len(b): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.
 			EventType, len(b), string(b))
 	}

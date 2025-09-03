@@ -18,7 +18,6 @@ package actress
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -31,6 +30,7 @@ import (
 	"strconv"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/pkg/profile"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -57,31 +57,43 @@ import (
 type Event struct {
 	Nr int
 	// EventType is a unique name to identify the type of the event.
-	EventType EventType `json:"eventType" yaml:"eventType"`
+	EventType EventType `json:"eventType" yaml:"eventType" cbor:"eventType"`
+	// EventKind is a more general way to describe the event that can
+	// be used to destinguish if it is static, error or dynamic event.
+	EventKind EventKind `json:"eventKind" yaml:"eventKind" cbor:"eventKind"`
 	// Cmd is usually used for giving instructions or parameters for
 	// what an event shall do.
-	Cmd []string `json:"cmd" yaml:"cmd"`
+	Cmd []string `json:"cmd" yaml:"cmd" cbor:"cmd"`
 	// Args are similar to Cmd, but the parameters can be stored in
 	// a hashmap as key/value items.
-	Args map[string]string `json:"args" yaml:"args"`
+	Args map[string]string `json:"args" yaml:"args" cbor:"args"`
 	// Data usually carries the data from one process to the next. Example
 	// could be a file read on process1 is put in the Data field, and
 	// passed on to process2 to be unmarshaled.
-	Data []byte `json:"data" yaml:"data"`
+	Data []byte `json:"data" yaml:"data" cbor:"data"`
+	// Data to be transfered internally. Example is to send config directly via
+	// the channel between internal actors.
+	InternalCh chan chan []byte `json:"-" yaml:"-" cbor:"-"`
 	// Err is used for defining the error message when the event is used
 	// as an error event.
-	Err error `json:"error" yaml:"error"`
+	Err error `json:"error" yaml:"error" cbor:"error"`
 	// NextEvent defines a series of events to be executed like a workflow.
 	// The receiving process should check this field for what kind of event
 	// to create as the next step in the workflow.
-	NextEvent *Event `json:"nextEvent" yaml:"nextEvent"`
+	NextEvent *Event `json:"nextEvent" yaml:"nextEvent" cbor:"nextEvent"`
 	// PreviousEvent allows for keeping information about the previous event if needed.
-	PreviousEvent *Event `json:"previousEvent" yaml:"previousEvent"`
+	PreviousEvent *Event `json:"previousEvent" yaml:"previousEvent" cbor:"previousEvent"`
 	// Dst node.
-	Dst Node `json:"dst" yaml:"dst"`
+	DstNode Node `json:"dst" yaml:"dst" cbor:"dst"`
 	// Src node.
-	Src Node `json:"src" yaml:"src"`
+	SrcNode Node `json:"src" yaml:"src" cbor:"src"`
 }
+
+type EventKind int
+
+const EventKindStatic EventKind = 1
+const EventKindError EventKind = 2
+const EventKindDynamic EventKind = 3
 
 type Node string
 
@@ -143,20 +155,32 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 		for {
 			select {
 			case ev := <-p.EventCh:
+				// If there is a next event defined, we make a copy of all the fields  of the current event,
+				// and put that as the previousEvent on the next event. We can use this information later
+				// if need to check something in the previous event.
+				if ev.NextEvent != nil {
+					// Keep the information about the current event, so we are able to check for things
+					// like ackTimeout and what node to reply back to if ack should be given.
+					ev.NextEvent.PreviousEvent = CopyEventFields(ev)
+				}
+
 				eventNr++
 				ev.Nr = eventNr
 
 				// Check if process is registred and valid.
 				if _, ok := p.Processes.procMap[ev.EventType]; !ok {
-					p.AddError(Event{EventType: ERLog, Err: fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
+					p.AddEvent(Event{EventType: ERLog,
+						EventKind: EventKindError,
+						Err:       fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
 				}
 
 				// Process was registered. Deliver the event to the process InCh.
 				p.Processes.procMap[ev.EventType].InCh <- ev
 
 			case <-ctx.Done():
-				p.AddError(Event{
+				p.AddEvent(Event{
 					EventType: ERLog,
+					EventKind: EventKindError,
 					Err:       fmt.Errorf("info: got ctx.Done"),
 				})
 
@@ -166,6 +190,23 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 	}
 
 	return fn
+}
+
+// Copy all the descriptive meta data fields of the Event, not
+// channels or Data.
+func CopyEventFields(ev Event) *Event {
+	e := Event{
+		Nr:        ev.Nr,
+		EventType: ev.EventType,
+		EventKind: ev.EventKind,
+		Cmd:       ev.Cmd,
+		Args:      ev.Args,
+		Err:       ev.Err,
+		DstNode:   ev.DstNode,
+		SrcNode:   ev.SrcNode,
+	}
+
+	return &e
 }
 
 // Press ctrl+c to exit.
@@ -199,8 +240,9 @@ func etTestChFn(ctx context.Context, p *Process) func() {
 				p.TestCh <- e
 
 			case <-ctx.Done():
-				p.AddError(Event{
+				p.AddEvent(Event{
 					EventType: ERLog,
+					EventKind: EventKindError,
 					Err:       fmt.Errorf("info: got ctx.Done"),
 				})
 
@@ -223,15 +265,19 @@ func etPidGetAllFn(ctx context.Context, p *Process) func() {
 			select {
 			case e := <-p.InCh:
 				pMap := p.pids.toProc.copyOfMap()
-				b, err := json.Marshal(pMap)
+				b, err := cbor.Marshal(pMap)
 				if err != nil {
-					log.Fatalf("error: failed to marshal pid to proc map: %v\n", err)
+					p.AddEvent(Event{
+						EventType: ERFatal,
+						Err:       fmt.Errorf("error: failed to marshal pid to proc map: %v", err),
+					})
 				}
-				p.AddEvent(Event{EventType: e.NextEvent.EventType, Data: b})
+				p.AddEvent(Event{EventType: e.NextEvent.EventType, EventKind: e.NextEvent.EventKind, Data: b})
 
 			case <-ctx.Done():
-				p.AddError(Event{
+				p.AddEvent(Event{
 					EventType: ERLog,
+					EventKind: EventKindError,
 					Err:       fmt.Errorf("info: got ctx.Done"),
 				})
 
@@ -300,8 +346,9 @@ func etDoneFn(ctx context.Context, p *Process) func() {
 
 			go func() {
 				fmt.Printf("info: got event ETDone: %v\n", string(d.Data))
-				p.AddError(Event{
+				p.AddEvent(Event{
 					EventType: ERLog,
+					EventKind: EventKindError,
 					Err:       fmt.Errorf("info: got etDone"),
 				})
 			}()
@@ -384,13 +431,17 @@ func etPidFn(ctx context.Context, p *Process) func() {
 				// Check the type of action we got.
 				switch action {
 				case pidGet:
-					p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
+					p.AddEvent(Event{EventType: ev.NextEvent.EventType,
+						EventKind: ev.NextEvent.EventKind,
+						Data:      []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
 
 				case pidGetAll:
 					pidProcMap := p.pids.toProc.copyOfMap()
 					for pid, procName := range *pidProcMap {
 
-						p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
+						p.AddEvent(Event{EventType: ev.NextEvent.EventType,
+							EventKind: ev.NextEvent.EventKind,
+							Data:      []byte(fmt.Sprintf("pid: %v, process name: %v", pid, procName))})
 					}
 				}
 
@@ -432,8 +483,12 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 						// Check if the extension of the file is correct.
 						ext := filepath.Ext(pth)
 						if ext == extension {
-							p.AddEvent(Event{EventType: ETReadFile, Cmd: []string{pth},
-								NextEvent: &Event{EventType: ETCustomEvent}})
+							p.AddEvent(Event{EventType: ETReadFile,
+								EventKind: EventKindStatic,
+								Cmd:       []string{pth},
+								NextEvent: &Event{EventType: ETCustomEvent,
+									EventKind: EventKindStatic,
+								}})
 						}
 
 						return nil
@@ -456,8 +511,13 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 							//if ext == extension {
 							//	log.Printf("op: %v, file : %v, extension: %v\n", fsEvent.Op, fileName, ext)
 							//}
-							p.AddEvent(Event{EventType: ETReadFile, Cmd: []string{fsEvent.Name},
-								NextEvent: &Event{EventType: ETCustomEvent}})
+							p.AddEvent(Event{EventType: ETReadFile,
+								EventKind: EventKindStatic,
+								Cmd:       []string{fsEvent.Name},
+								NextEvent: &Event{EventType: ETCustomEvent,
+									EventKind: EventKindStatic,
+								}})
+
 						case fsEvent.Has(fsnotify.Remove):
 							fileName := filepath.Base(fsEvent.Name)
 							ext := filepath.Ext(fileName)
@@ -549,12 +609,12 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 			case ev := <-p.InCh:
 				go func() {
 					ce := customEvent{}
-					err := json.Unmarshal(ev.Data, &ce)
+					err := cbor.Unmarshal(ev.Data, &ce)
 					if err != nil {
 						log.Fatalf("failed to unmarshal custom event data: %v\n", err)
 					}
 
-					NewProcess(ctx, *p, EventType(ce.Name), etCustomCmdFn(ce.Cmd)).Act()
+					NewProcess(ctx, p, EventType(ce.Name), etCustomCmdFn(ce.Cmd)).Act()
 					// DEBUG: Injecting an event for testing while developing.
 					// p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
 				}()
@@ -594,7 +654,9 @@ func etCustomCmdFn(command []string) func(ctx context.Context, p *Process) func(
 
 					err := cmd.Start()
 					if err != nil {
-						p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, err.Error())})
+						p.AddEvent(Event{EventType: ERFatal,
+							EventKind: EventKindError,
+							Err:       fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, err.Error())})
 					}
 
 					go func() {
@@ -604,7 +666,9 @@ func etCustomCmdFn(command []string) func(ctx context.Context, p *Process) func(
 								fmt.Printf("%v\n", scanner.Text())
 								continue
 							}
-							p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
+							p.AddEvent(Event{EventType: ev.NextEvent.EventType,
+								EventKind: ev.NextEvent.EventKind,
+								Data:      scanner.Bytes()})
 						}
 					}()
 
@@ -615,7 +679,9 @@ func etCustomCmdFn(command []string) func(ctx context.Context, p *Process) func(
 								fmt.Printf("%v\n", scanner.Text())
 								continue
 							}
-							p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
+							p.AddEvent(Event{EventType: ev.NextEvent.EventType,
+								EventKind: ev.NextEvent.EventKind,
+								Data:      scanner.Bytes()})
 						}
 					}()
 
@@ -623,7 +689,9 @@ func etCustomCmdFn(command []string) func(ctx context.Context, p *Process) func(
 
 					err = cmd.Wait()
 					if err != nil {
-						p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to wait for command, err: %v, errText: %v", err, err.Error())})
+						p.AddEvent(Event{EventType: ERFatal,
+							EventKind: EventKindError,
+							Err:       fmt.Errorf("error: failed to wait for command, err: %v, errText: %v", err, err.Error())})
 					}
 
 					//p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
@@ -671,7 +739,9 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 
 				err := cmd.Start()
 				if err != nil {
-					p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, err.Error())})
+					p.AddEvent(Event{EventType: ERFatal,
+						EventKind: EventKindError,
+						Err:       fmt.Errorf("error: failed to run command, err: %v, errText: %v", err, err.Error())})
 				}
 
 				go func() {
@@ -681,7 +751,9 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 							fmt.Printf("%v\n", scanner.Text())
 							continue
 						}
-						p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
+						p.AddEvent(Event{EventType: ev.NextEvent.EventType,
+							EventKind: ev.NextEvent.EventKind,
+							Data:      scanner.Bytes()})
 					}
 				}()
 
@@ -692,7 +764,9 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 							fmt.Printf("%v\n", scanner.Text())
 							continue
 						}
-						p.AddEvent(Event{EventType: ev.NextEvent.EventType, Data: scanner.Bytes()})
+						p.AddEvent(Event{EventType: ev.NextEvent.EventType,
+							EventKind: ev.NextEvent.EventKind,
+							Data:      scanner.Bytes()})
 					}
 				}()
 
@@ -700,7 +774,9 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 
 				err = cmd.Wait()
 				if err != nil {
-					p.AddError(Event{EventType: ERFatal, Err: fmt.Errorf("error: failed to wait for command, err: %v, errText: %v", err, err.Error())})
+					p.AddEvent(Event{EventType: ERFatal,
+						EventKind: EventKindError,
+						Err:       fmt.Errorf("error: failed to wait for command, err: %v, errText: %v", err, err.Error())})
 				}
 
 				//p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
