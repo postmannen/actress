@@ -18,22 +18,38 @@ To initiate and trigger the execution of the process's function, we send events.
 
 ```Go
 type Event struct {
+    Nr int
     // EventType is a unique name to identify the type of the event.
-    EventType EventType 
+    EventType EventType `json:"eventType" yaml:"eventType" cbor:"eventType"`
+    // EventKind is a more general way to describe the event that can
+    // be used to destinguish if it is static, error or dynamic event.
+    EventKind EventKind `json:"eventKind" yaml:"eventKind" cbor:"eventKind"`
     // Cmd is usually used for giving instructions or parameters for
     // what an event shall do.
-    Cmd       []string
+    Cmd []string `json:"cmd" yaml:"cmd" cbor:"cmd"`
+    // Args are similar to Cmd, but the parameters can be stored in
+    // a hashmap as key/value items.
+    Args map[string]string `json:"args" yaml:"args" cbor:"args"`
     // Data usually carries the data from one process to the next. Example
     // could be a file read on process1 is put in the Data field, and
     // passed on to process2 to be unmarshaled.
-    Data      []byte
+    Data []byte `json:"data" yaml:"data" cbor:"data"`
+    // Data to be transfered internally. Example is to send config directly via
+    // the channel between internal actors.
+    InternalCh chan chan []byte `json:"-" yaml:"-" cbor:"-"`
     // Err is used for defining the error message when the event is used
     // as an error event.
-    Err       error
+    Err error `json:"error" yaml:"error" cbor:"error"`
     // NextEvent defines a series of events to be executed like a workflow.
     // The receiving process should check this field for what kind of event
-    // to create as the next step in the workflow.    
-    NextEvent *Event 
+    // to create as the next step in the workflow.
+    NextEvent *Event `json:"nextEvent" yaml:"nextEvent" cbor:"nextEvent"`
+    // PreviousEvent allows for keeping information about the previous event if needed.
+    PreviousEvent *Event `json:"previousEvent" yaml:"previousEvent" cbor:"previousEvent"`
+    // Dst node.
+    DstNode Node `json:"dst" yaml:"dst" cbor:"dst"`
+    // Src node.
+    SrcNode Node `json:"src" yaml:"src" cbor:"src"`
 }
 ```
 
@@ -67,8 +83,10 @@ func main() {
     defer cancel()
 
     // Create a new root process.
-    rootAct := actress.NewRootProcess(ctx)
-    // Create a test channel where we receive the end result.
+    cfg, _ := actress.NewConfig()
+    rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
+    rootAct.Act()
+    
     testCh := make(chan string)
 
     // Define two event types for two processes.
@@ -116,8 +134,8 @@ func main() {
     }
 
     // Register the event types and event function to processes.
-    actress.NewProcess(ctx, *rootAct, ETTest1, test1Func).Act()
-    actress.NewProcess(ctx, *rootAct, ETTest2, test2Func).Act()
+    actress.NewProcess(ctx, *rootAct, ETTest1, actress.EventKindStatic, test1Func).Act()
+    actress.NewProcess(ctx, *rootAct, ETTest2, actress.EventKindStatic, test2Func).Act()
 
     // Start all the registered processes.
     err := rootAct.Act()
