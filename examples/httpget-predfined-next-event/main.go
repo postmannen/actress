@@ -31,7 +31,8 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil)
+	cfg, _ := actress.NewConfig()
+	rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
 
 	const ETHttpGet actress.EventType = "ETHttpGet"
 	const ETWriteToFile actress.EventType = "ETWriteToFile"
@@ -99,8 +100,8 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, rootAct, ETWriteToFile, WriteToFileFunc).Act()
-	actress.NewProcess(ctx, rootAct, ETHttpGet, httpGetFunc).Act()
+	actress.NewProcess(ctx, rootAct, ETWriteToFile, actress.EventKindStatic, WriteToFileFunc).Act()
+	actress.NewProcess(ctx, rootAct, ETHttpGet, actress.EventKindStatic, httpGetFunc).Act()
 
 	// Add an event, and also specify the next event to add so we can
 	// do a httpget first in the first process, then send the result

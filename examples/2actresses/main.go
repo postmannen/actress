@@ -15,7 +15,8 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil)
+	cfg, _ := actress.NewConfig()
+	rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
 	// Create a test channel where we receive the end result.
 	testCh := make(chan string)
 
@@ -68,8 +69,8 @@ func main() {
 	}
 
 	// Register the event types and event function to processes.
-	actress.NewProcess(ctx, rootAct, ETTest1, test1Func).Act()
-	actress.NewProcess(ctx, rootAct, ETTest2, test2Func).Act()
+	actress.NewProcess(ctx, rootAct, ETTest1, actress.EventKindStatic, test1Func).Act()
+	actress.NewProcess(ctx, rootAct, ETTest2, actress.EventKindStatic, test2Func).Act()
 
 	// Start all the registered processes.
 	err := rootAct.Act()

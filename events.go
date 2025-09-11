@@ -93,6 +93,14 @@ type EventKind int
 
 const EventKindStatic EventKind = 1
 const EventKindError EventKind = 2
+
+// NewDynProcess will prepare and return a *Process. It will copy
+// channels and map structures from the root process.
+// The purpose of dynamic processes is to have short lived processes
+// that can be quickly started, and removed again when it's job is done.
+// The only difference between a process and a dynamic process are that
+// the dynamic processes have a mutex in processes map DynProcesses so
+// we also can delete the processes when they are no longer needed.
 const EventKindDynamic EventKind = 3
 
 type Node string
@@ -168,14 +176,17 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 				ev.Nr = eventNr
 
 				// Check if process is registred and valid.
-				if _, ok := p.Processes.procMap[ev.EventType]; !ok {
+				if _, ok := p.StaticProcesses.procMap[ev.EventType]; !ok {
 					p.AddEvent(Event{EventType: ERLog,
 						EventKind: EventKindError,
-						Err:       fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
+						Err:       fmt.Errorf("etRouter: on %v found no process registered for the event type : %v", p.Config.NodeName, ev.EventType)})
 				}
 
 				// Process was registered. Deliver the event to the process InCh.
-				p.Processes.procMap[ev.EventType].InCh <- ev
+				log.Printf(" -------- DEBUG %v ---------p.Processes.procMap[ev.EventType] : %v\n", p.Config.NodeName, p.StaticProcesses.procMap[ev.EventType])
+				log.Printf(" -------- DEBUG %v---------p ev.EventType : %v\n", p.Config.NodeName, ev.EventType)
+				log.Printf(" -------- DEBUG %v---------p.Processes.procMap[ev.EventType].InCh : %v\n", p.Config.NodeName, p.StaticProcesses.procMap[ev.EventType].InCh)
+				p.StaticProcesses.procMap[ev.EventType].InCh <- ev
 
 			case <-ctx.Done():
 				p.AddEvent(Event{
@@ -315,6 +326,7 @@ func etProfilingFn(ctx context.Context, p *Process) func() {
 		}
 
 		if p.Config.Metrics || p.Config.Profiling != "" {
+			log.Printf("STARTING UP WEB SERVER !!!!!!!!!!!!!!!!!!!!!!!!!!")
 			go http.ListenAndServe("localhost:6060", nil)
 		}
 
@@ -614,7 +626,7 @@ func ETCustomEventFn(ctx context.Context, p *Process) func() {
 						log.Fatalf("failed to unmarshal custom event data: %v\n", err)
 					}
 
-					NewProcess(ctx, p, EventType(ce.Name), etCustomCmdFn(ce.Cmd)).Act()
+					NewProcess(ctx, p, EventType(ce.Name), EventKindStatic, etCustomCmdFn(ce.Cmd)).Act()
 					// DEBUG: Injecting an event for testing while developing.
 					// p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
 				}()
@@ -788,3 +800,16 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 
 	return fn
 }
+
+// ETRemote is an EventType that will be used if
+// an event should be delivered to a remote node.
+//
+// There are no ETFunc defined for ETRemote in Actress,
+// so it is up to the user to write this function, and
+// attach their own ETFunc when they create the process
+// to handle the ETRemote EventType.
+//
+// ETRemote are for example used in the AddEvent function,
+// and will be prepended to the current event if it should
+// not be handled locally.
+const ETRemote EventType = "ETRemote"

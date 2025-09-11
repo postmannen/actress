@@ -25,18 +25,37 @@ import (
 // processes holds information about what process functions
 // who belongs to what event, and also a map of the started
 // processes.
-type processes struct {
+type staticProcesses struct {
 	procMap map[EventType]*Process
 }
 
 // Add a new Event and it's process to the processes map.
-func (p *processes) add(et EventType, proc *Process) {
+func (p *Process) add(et EventType, proc *Process, eventKind EventKind) {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
-	if _, ok := p.procMap[et]; ok {
-		p.procMap[et].Cancel()
+	switch eventKind {
+	case EventKindStatic:
+		if _, ok := p.StaticProcesses.procMap[et]; ok {
+			p.StaticProcesses.procMap[et].Cancel()
+		}
+		p.StaticProcesses.procMap[et] = proc
+	case EventKindDynamic:
+
+		p.DynProcesses.mu.Lock()
+		defer p.DynProcesses.mu.Unlock()
+		if _, ok := p.DynProcesses.procMap[et]; ok {
+			p.DynProcesses.procMap[et].Cancel()
+		}
+		p.DynProcesses.procMap[et] = proc
+	case EventKindError:
+		// Check if a process for the same event is defined, and if so we
+		// cancel the current process before we replace it with a new one.
+		if _, ok := p.ErrProcesses.procMap[et]; ok {
+			p.ErrProcesses.procMap[et].Cancel()
+		}
+		p.ErrProcesses.procMap[et] = proc
+
 	}
-	p.procMap[et] = proc
 }
 
 // // Delete an Event and it's process from the processes map.
@@ -48,7 +67,7 @@ func (p *processes) add(et EventType, proc *Process) {
 // }
 
 // Checks if the event is defined in the processes map, and returns true if it is.
-func (p *processes) IsEventDefined(ev EventType) bool {
+func (p *staticProcesses) IsEventDefined(ev EventType) bool {
 	if _, ok := p.procMap[ev]; !ok {
 		return false
 	}
@@ -57,8 +76,8 @@ func (p *processes) IsEventDefined(ev EventType) bool {
 }
 
 // Prepare and return a new *processes structure.
-func newProcesses() *processes {
-	p := processes{
+func newStaticProcesses() *staticProcesses {
+	p := staticProcesses{
 		procMap: make(map[EventType]*Process),
 	}
 	return &p
@@ -152,8 +171,10 @@ type Process struct {
 	DynCh chan Event `json:"-"`
 	// The event type for the process.
 	Event EventType
-	// Maps for various process information.
-	Processes *processes
+	// The event kind of the process
+	Kind EventKind
+	// Maps for various staticProcess information.
+	StaticProcesses *staticProcesses
 	// Map of dynamic processes
 	DynProcesses *dynProcesses
 	// Maps for various errProcess information
@@ -179,25 +200,24 @@ type Process struct {
 // The root process will also start up all the essential other
 // processes needed, like the event router, and various standard
 // error handling processes.
-func NewRootProcess(ctx context.Context, fn ETFunc) *Process {
+func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config, etRemoteFunc ETFunc) *Process {
 	ctx, cancel := context.WithCancel(ctx)
-	conf := NewConfig()
 
 	p := Process{
-		fn:           nil,
-		InCh:         make(chan Event),
-		EventCh:      make(chan Event),
-		ErrorCh:      make(chan Event),
-		TestCh:       make(chan Event),
-		DynCh:        make(chan Event),
-		Event:        ETRoot,
-		Processes:    newProcesses(),
-		DynProcesses: newDynProcesses(),
-		ErrProcesses: newErrProcesses(),
-		isRoot:       true,
-		Config:       conf,
-		pids:         newPids(),
-		Cancel:       cancel,
+		fn:              nil,
+		InCh:            make(chan Event),
+		EventCh:         make(chan Event),
+		ErrorCh:         make(chan Event),
+		TestCh:          make(chan Event),
+		DynCh:           make(chan Event),
+		Event:           ETRoot,
+		StaticProcesses: newStaticProcesses(),
+		DynProcesses:    newDynProcesses(),
+		ErrProcesses:    newErrProcesses(),
+		isRoot:          true,
+		Config:          conf,
+		pids:            newPids(),
+		Cancel:          cancel,
 	}
 
 	p.PID = p.pids.nr
@@ -209,64 +229,94 @@ func NewRootProcess(ctx context.Context, fn ETFunc) *Process {
 	// Register and start all the standard child processes
 	// that should spawn off the root process
 
-	NewProcess(ctx, &p, ETProfiling, etProfilingFn).Act()
+	NewProcess(ctx, &p, ETProfiling, EventKindStatic, etProfilingFn).Act()
 
 	if p.Config.CustomEvents {
-		NewProcess(ctx, &p, ETCustomEvent, ETCustomEventFn).Act()
-		NewProcess(ctx, &p, ETWatchEventFile, wrapperETWatchEventFileFn(p.Config.CustomEventsPath, ".json")).Act()
+		NewProcess(ctx, &p, ETCustomEvent, EventKindStatic, ETCustomEventFn).Act()
+		NewProcess(ctx, &p, ETWatchEventFile, EventKindStatic, wrapperETWatchEventFileFn(p.Config.CustomEventsPath, ".json")).Act()
 	}
 
 	// Starting up the routers first.
-	NewProcess(ctx, &p, ETRouter, etRouterFn).Act()
-	NewErrProcess(ctx, &p, ERRouter, erRouterFn).Act()
-	NewDynProcess(ctx, &p, EDRouter, edRouterFn).Act()
+	NewProcess(ctx, &p, ETRouter, EventKindStatic, etRouterFn).Act()
+	NewProcess(ctx, &p, ERRouter, EventKindError, erRouterFn).Act()
+	NewProcess(ctx, &p, EDRouter, EventKindDynamic, edRouterFn).Act()
 
 	// Starting error handling processes.
-	NewErrProcess(ctx, &p, ERLog, erLogFn).Act()
-	NewErrProcess(ctx, &p, ERDebug, erDebugFn).Act()
-	NewErrProcess(ctx, &p, ERFatal, erFatalFn).Act()
-	NewErrProcess(ctx, &p, ERTest, erTestFn).Act()
-	NewProcess(ctx, &p, ETPrint, etPrintFn).Act()
+	NewProcess(ctx, &p, ERLog, EventKindError, erLogFn).Act()
+	NewProcess(ctx, &p, ERDebug, EventKindError, erDebugFn).Act()
+	NewProcess(ctx, &p, ERFatal, EventKindError, erFatalFn).Act()
+	NewProcess(ctx, &p, ERTest, EventKindError, erTestFn).Act()
+	NewProcess(ctx, &p, ERNone, EventKindError, erNoneFn).Act()
+	NewProcess(ctx, &p, ETPrint, EventKindStatic, etPrintFn).Act()
 
 	// Starting the remainding processes.
-	NewProcess(ctx, &p, ETOsSignal, etOsSignalFn).Act()
-	NewProcess(ctx, &p, ETTestCh, etTestChFn).Act()
-	NewProcess(ctx, &p, ETPid, etPidFn).Act()
-	NewProcess(ctx, &p, ETReadFile, ETReadFileFn).Act()
-	NewProcess(ctx, &p, ETOsCmd, etOsCmdFn).Act()
+	NewProcess(ctx, &p, ETOsSignal, EventKindStatic, etOsSignalFn).Act()
+	NewProcess(ctx, &p, ETTestCh, EventKindStatic, etTestChFn).Act()
+	NewProcess(ctx, &p, ETPid, EventKindStatic, etPidFn).Act()
+	NewProcess(ctx, &p, ETReadFile, EventKindStatic, ETReadFileFn).Act()
+	NewProcess(ctx, &p, ETOsCmd, EventKindStatic, etOsCmdFn).Act()
 
-	NewProcess(ctx, &p, ETDone, etDoneFn).Act()
-	NewProcess(ctx, &p, ETExit, etExitFn).Act()
-	NewProcess(ctx, &p, ETPidGetAll, etPidGetAllFn).Act()
+	NewProcess(ctx, &p, ETDone, EventKindStatic, etDoneFn).Act()
+	NewProcess(ctx, &p, ETExit, EventKindStatic, etExitFn).Act()
+	NewProcess(ctx, &p, ETPidGetAll, EventKindStatic, etPidGetAllFn).Act()
 
-	NewDynProcess(ctx, &p, EDRouter, edRouterFn).Act()
+	NewProcess(ctx, &p, EDRouter, EventKindDynamic, edRouterFn).Act()
+
+	// If there are no ETRemote function given as an argument, we just add
+	// a function to be used for creating a dummy ETRemote process. It clears
+	// the value of Event.DstNode, adding it back with AddEvent, so it will
+	// be delivered locally only.
+	if etRemoteFunc == nil {
+		fn := func(ctx context.Context, p *Process) func() {
+			fn2 := func() {
+				for {
+					select {
+					case ev := <-p.InCh:
+						// The original event are stored in the NextEvent.
+						// Remove the DstNode so it don't get forwarded again,
+						// and add the original event again.
+						ev.NextEvent.DstNode = ""
+						p.AddEvent(*ev.NextEvent)
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+			return fn2
+		}
+		NewProcess(ctx, &p, ETRemote, EventKindStatic, fn).Act()
+
+	} else {
+		NewProcess(ctx, &p, ETRemote, EventKindStatic, etRemoteFunc).Act()
+	}
 
 	return &p
 }
 
 // NewProcess will prepare and return a *Process. It will copy
 // channels and map structures from the root process.
-func NewProcess(ctx context.Context, parentP *Process, event EventType, fn ETFunc) *Process {
+func NewProcess(ctx context.Context, parentP *Process, event EventType, kind EventKind, fn ETFunc) *Process {
 	ctx, cancel := context.WithCancel(ctx)
 	p := Process{
-		fn:           nil,
-		InCh:         make(chan Event),
-		EventCh:      parentP.EventCh,
-		ErrorCh:      parentP.ErrorCh,
-		TestCh:       parentP.TestCh,
-		DynCh:        parentP.DynCh,
-		Event:        event,
-		Processes:    parentP.Processes,
-		DynProcesses: parentP.DynProcesses,
-		ErrProcesses: parentP.ErrProcesses,
-		isRoot:       false,
-		Config:       parentP.Config,
-		pids:         parentP.pids,
-		PID:          parentP.pids.next(),
-		Cancel:       cancel,
+		fn:              nil,
+		InCh:            make(chan Event),
+		EventCh:         parentP.EventCh,
+		ErrorCh:         parentP.ErrorCh,
+		TestCh:          parentP.TestCh,
+		DynCh:           parentP.DynCh,
+		Event:           event,
+		Kind:            kind,
+		StaticProcesses: parentP.StaticProcesses,
+		DynProcesses:    parentP.DynProcesses,
+		ErrProcesses:    parentP.ErrProcesses,
+		isRoot:          false,
+		Config:          parentP.Config,
+		pids:            parentP.pids,
+		PID:             parentP.pids.next(),
+		Cancel:          cancel,
 	}
 
-	p.Processes.add(event, &p)
+	p.add(event, &p, kind)
 
 	if fn != nil {
 		p.fn = fn(ctx, &p)
@@ -278,7 +328,28 @@ func NewProcess(ctx context.Context, parentP *Process, event EventType, fn ETFun
 // on the specified EventKind of the Event.
 // If the EventKind are missing the event will be handled as a static
 // event.
+// If the event is to be delivered to a remote node, AddEvent will also
+// take care of that and ship the event off to the ETRemote process.
 func (p *Process) AddEvent(event Event) {
+	// Check if the Event is to be sent to a remote node by checking
+	// if the DstNode of the event and the local NodeName are equal.
+	//
+	// If the Event is to be sent to a remote node we wrap it in an
+	// ETRemote event, and forward it to the ETRemote actor here.
+	if event.DstNode != p.Config.NodeName && event.DstNode != "" {
+		log.Printf("******DEBUG******: event.DstNode: %v, p.NodeName: %v\n", event.DstNode, p.Config.NodeName)
+
+		remoteEv := Event{
+			EventType: ETRemote,
+			EventKind: EventKindStatic,
+			NextEvent: &event,
+		}
+
+		p.addEventStatic(remoteEv)
+		return
+	}
+
+	// The event is
 	switch event.EventKind {
 	case EventKindStatic:
 		p.addEventStatic(event)
@@ -312,7 +383,7 @@ func (p *Process) addEventError(event Event) {
 // after calling this function. The process can still be used
 // and we can communicate with it via it's channels.
 func (p *Process) Act() error {
-	log.Printf("Starting actor for EventType: %v\n", p.Event)
+	log.Printf("on node %v: Starting %v actor for EventType: %v\n", p.Config.NodeName, p.Kind, p.Event)
 	if p.fn == nil {
 		//go p.fn()
 		return nil

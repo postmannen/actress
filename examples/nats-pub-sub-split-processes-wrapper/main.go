@@ -100,7 +100,8 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := ac.NewRootProcess(ctx, nil)
+	cfg, _ := ac.NewConfig()
+	rootAct := ac.NewRootProcess(ctx, nil, cfg, nil)
 	err := rootAct.Act()
 	if err != nil {
 		log.Fatal(err)
@@ -129,12 +130,12 @@ func main() {
 	defer conn.Close()
 
 	// Create a nats sub process.
-	err = ac.NewProcess(ctx, rootAct, ETNatsSub, wrapperETNatsSubscriber(conn)).Act()
+	err = ac.NewProcess(ctx, rootAct, ETNatsSub, ac.EventKindStatic, wrapperETNatsSubscriber(conn)).Act()
 	if err != nil {
 		log.Fatal(err)
 	}
 	// Create a nats pub process.
-	err = ac.NewProcess(ctx, rootAct, ETNatsPub, wrapperETNatsPublisher(conn)).Act()
+	err = ac.NewProcess(ctx, rootAct, ETNatsPub, ac.EventKindStatic, wrapperETNatsPublisher(conn)).Act()
 	if err != nil {
 		log.Fatal(err)
 	}

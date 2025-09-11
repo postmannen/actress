@@ -41,7 +41,7 @@ func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 				listenerET := evGetInit.Cmd[1]
 				thisET := evGetInit.Cmd[2]
 
-				actress.NewDynProcess(ctx, p, actress.EventType(thisET), func(ctx context.Context, p *actress.Process) func() {
+				actress.NewProcess(ctx, p, actress.EventType(thisET), actress.EventKindDynamic, func(ctx context.Context, p *actress.Process) func() {
 					return func() {
 						timeout := 5
 						ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
@@ -141,7 +141,7 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			}
 
-			actress.NewDynProcess(ctx, p, actress.EventType(listenerET), func(ctx context.Context, p *actress.Process) func() {
+			actress.NewProcess(ctx, p, actress.EventType(listenerET), actress.EventKindDynamic, func(ctx context.Context, p *actress.Process) func() {
 				return func() {
 					// Event ET2 <- clientConn
 					go func() {
@@ -224,7 +224,8 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil)
+	cfg, _ := actress.NewConfig()
+	rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
 
 	// Start all the registered actors.
 	err := rootAct.Act()
@@ -233,8 +234,8 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, rootAct, ETHttpGet, etHttpGetFn).Act()
-	actress.NewProcess(ctx, rootAct, ETProxyListener, etProxyListenerFn).Act()
+	actress.NewProcess(ctx, rootAct, ETHttpGet, actress.EventKindStatic, etHttpGetFn).Act()
+	actress.NewProcess(ctx, rootAct, ETProxyListener, actress.EventKindStatic, etProxyListenerFn).Act()
 
 	//rootAct.AddEvent(actress.Event{EventType: ETHttpGet, Cmd: []string{"http://vg.no"}})
 	// Receive and print the result.

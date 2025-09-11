@@ -29,7 +29,8 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := actress.NewRootProcess(ctx, nil)
+	cfg, _ := actress.NewConfig()
+	rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
 	rootAct.Act()
 
 	// Start all the registered actors.

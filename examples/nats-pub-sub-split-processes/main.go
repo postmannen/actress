@@ -97,8 +97,8 @@ func etNatsClientFunc(ctx context.Context, p *ac.Process) func() {
 			return fn
 		}
 
-		ac.NewProcess(ctx, p, ETNatsSub, subFn).Act()
-		ac.NewProcess(ctx, p, ETNatsPub, pubFn).Act()
+		ac.NewProcess(ctx, p, ETNatsSub, ac.EventKindStatic, subFn).Act()
+		ac.NewProcess(ctx, p, ETNatsPub, ac.EventKindStatic, pubFn).Act()
 
 		<-ctx.Done()
 	}
@@ -111,7 +111,8 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := ac.NewRootProcess(ctx, nil)
+	cfg, _ := ac.NewConfig()
+	rootAct := ac.NewRootProcess(ctx, nil, cfg, nil)
 	err := rootAct.Act()
 	if err != nil {
 		log.Fatal(err)
@@ -128,7 +129,7 @@ func main() {
 	time.Sleep(time.Second * 2)
 
 	// Create a nats client process.
-	err = ac.NewProcess(ctx, rootAct, ETNatsClient, etNatsClientFunc).Act()
+	err = ac.NewProcess(ctx, rootAct, ETNatsClient, ac.EventKindStatic, etNatsClientFunc).Act()
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -78,42 +78,6 @@ func NewUUID() string {
 	return u.String()
 }
 
-// NewDynProcess will prepare and return a *Process. It will copy
-// channels and map structures from the root process.
-// The purpose of dynamic processes is to have short lived processes
-// that can be quickly started, and removed again when it's job is done.
-// The only difference between a process and a dynamic process are that
-// the dynamic processes have a mutex in processes map DynProcesses so
-// we also can delete the processes when they are no longer needed.
-
-func NewDynProcess(ctx context.Context, parentP *Process, event EventType, fn ETFunc) *Process {
-	ctx, cancel := context.WithCancel(ctx)
-	p := Process{
-		fn:           nil,
-		InCh:         make(chan Event),
-		EventCh:      parentP.EventCh,
-		ErrorCh:      parentP.ErrorCh,
-		TestCh:       parentP.TestCh,
-		DynCh:        parentP.DynCh,
-		Event:        event,
-		Processes:    parentP.Processes,
-		DynProcesses: parentP.DynProcesses,
-		ErrProcesses: parentP.ErrProcesses,
-		isRoot:       false,
-		Config:       parentP.Config,
-		pids:         parentP.pids,
-		PID:          parentP.pids.next(),
-		Cancel:       cancel,
-	}
-
-	p.DynProcesses.Add(event, &p)
-
-	if fn != nil {
-		p.fn = fn(ctx, &p)
-	}
-	return &p
-}
-
 // ------------------------------------------------------
 
 // Router for normal events.
@@ -152,7 +116,7 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 							if !ok {
 								p.AddEvent(Event{EventType: ERLog,
 									EventKind: EventKindError,
-									Err:       fmt.Errorf("found no process registered for the event type : %v", ev.EventType)})
+									Err:       fmt.Errorf("edRouter: on %v found no process registered for the event type : %v, ev.DstNode: %v", p.Config.NodeName, ev.EventType, ev.DstNode)})
 								time.Sleep(time.Millisecond * 1000)
 								continue
 							}

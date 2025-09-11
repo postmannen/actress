@@ -16,6 +16,7 @@
 package actress
 
 import (
+	"flag"
 	"log"
 	"os"
 	"strconv"
@@ -29,9 +30,11 @@ type Config struct {
 	NodeName         Node
 }
 
-// New config will check flags and env variables set, and prepare
-// and return the resulting *config.
-func NewConfig() *Config {
+// New config prepare a *Config, and a *flag.FlagSet, and return the
+// resulting actress *Config and *flag.FlagSet.
+// The flags are checked for env variables, and if not found, the default value is used.
+// The flagset needs to be parsed for the flags to be set.
+func NewConfig() (*Config, *flag.FlagSet) {
 	// The config with default values set.
 	c := Config{
 		Profiling:        "none",
@@ -40,12 +43,13 @@ func NewConfig() *Config {
 		CustomEventsPath: "customevents",
 	}
 
-	c.Profiling = CheckEnv("PROFILING", c.Profiling).(string)
-	c.CustomEvents = CheckEnv("CUSTOMEVENTS", c.CustomEvents).(bool)
-	c.Metrics = CheckEnv("METRICS", c.Metrics).(bool)
-	c.CustomEventsPath = CheckEnv("CUSTOMEVENTSPATH", c.CustomEventsPath).(string)
+	fs := flag.NewFlagSet("config", flag.ContinueOnError)
+	fs.StringVar(&c.Profiling, "profiling", CheckEnv("PROFILING", c.Profiling).(string), "profiling (env PROFILING)")
+	fs.BoolVar(&c.CustomEvents, "customEvents", CheckEnv("CUSTOMEVENTS", c.CustomEvents).(bool), "custom events (env CUSTOMEVENTS)")
+	fs.BoolVar(&c.Metrics, "metrics", CheckEnv("METRICS", c.Metrics).(bool), "metrics (env METRICS)")
+	fs.StringVar(&c.CustomEventsPath, "customEventsPath", CheckEnv("CUSTOMEVENTSPATH", c.CustomEventsPath).(string), "custom events path (env CUSTOMEVENTSPATH)")
 
-	return &c
+	return &c, fs
 }
 
 // Check if an env variable is set. If found, return the value.

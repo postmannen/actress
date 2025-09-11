@@ -92,7 +92,8 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	rootAct := ac.NewRootProcess(ctx, nil)
+	cfg, _ := ac.NewConfig()
+	rootAct := ac.NewRootProcess(ctx, nil, cfg, nil)
 	err := rootAct.Act()
 	if err != nil {
 		log.Fatal(err)
@@ -110,7 +111,7 @@ func main() {
 	time.Sleep(time.Second * 2)
 
 	// Create a nats client process.
-	err = ac.NewProcess(ctx, rootAct, ETNatsClient, etNatsClientFunc).Act()
+	err = ac.NewProcess(ctx, rootAct, ETNatsClient, ac.EventKindStatic, etNatsClientFunc).Act()
 	if err != nil {
 		log.Fatal(err)
 	}
