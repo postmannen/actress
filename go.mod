@@ -9,6 +9,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/goccy/go-yaml v1.18.0
 	github.com/google/uuid v1.6.0
+	github.com/nats-io/nats.go v1.45.0
 	github.com/pkg/profile v1.7.0
 	github.com/prometheus/client_golang v1.22.0
 )
@@ -21,7 +22,6 @@ require (
 	github.com/google/pprof v0.0.0-20250607225305-033d6d78b36a // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/nats-io/nats.go v1.45.0 // indirect
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
