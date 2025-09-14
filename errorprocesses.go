@@ -25,7 +25,7 @@ import (
 // processes holds information about what process functions
 // who belongs to what event, and also a map of the started
 // processes.
-type errProcesses struct {
+type errorProcesses struct {
 	procMap map[EventType]*Process
 }
 
@@ -38,7 +38,7 @@ type errProcesses struct {
 // }
 
 // Checks if the event is defined in the processes map, and returns true if it is.
-func (p *errProcesses) IsEventDefined(ev EventType) bool {
+func (p *errorProcesses) IsEventDefined(ev EventType) bool {
 	if _, ok := p.procMap[ev]; !ok {
 		return false
 	}
@@ -47,8 +47,8 @@ func (p *errProcesses) IsEventDefined(ev EventType) bool {
 }
 
 // Prepare and return a new *processes structure.
-func newErrProcesses() *errProcesses {
-	p := errProcesses{
+func newErrorProcesses() *errorProcesses {
+	p := errorProcesses{
 		procMap: make(map[EventType]*Process),
 	}
 	return &p
@@ -64,7 +64,7 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 
 		for {
 			select {
-			case e := <-p.ErrorCh:
+			case e := <-p.ErrorEventCh:
 				// If there is a next event defined, we make a copy of all the fields  of the current event,
 				// and put that as the previousEvent on the next event. We can use this information later
 				// if need to check something in the previous event.
@@ -77,7 +77,7 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 				eventNr++
 				e.Nr = eventNr
 
-				p.ErrProcesses.procMap[e.EventType].InCh <- e
+				p.ErrorProcesses.procMap[e.EventType].InCh <- e
 
 			case <-ctx.Done():
 				// NB: Bevare of this one getting stuck if for example the error

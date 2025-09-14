@@ -57,7 +57,7 @@ func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 						defer func() {
 							log.Printf("CANCELED DESTINATION, %v\n", thisET)
 							cancel()
-							defer p.DynProcesses.Delete(actress.EventType(thisET))
+							defer p.DynamicProcesses.Delete(actress.EventType(thisET))
 						}()
 
 						// destConn <- event
@@ -151,7 +151,7 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 							log.Printf("CLOSING: clientConn, %v", listenerET)
 							clientConn.Close()
 							p.Cancel()
-							defer p.DynProcesses.Delete(actress.EventType(listenerET))
+							defer p.DynamicProcesses.Delete(actress.EventType(listenerET))
 						}()
 
 						for {

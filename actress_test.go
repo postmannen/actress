@@ -137,7 +137,7 @@ func TestDynamicProcess2(t *testing.T) {
 										Data:      []byte("from dyn2")})
 
 									// We are now done with the dyn2EVType process so we delete it.
-									p.DynProcesses.Delete(EventType(dyn2EVType))
+									p.DynamicProcesses.Delete(EventType(dyn2EVType))
 									t.Logf("\nsuccessfully deleted process: %v\n", dyn2EVType)
 								case <-ctx.Done():
 									return
@@ -240,7 +240,7 @@ func TestDynamicProcessReaderWriter(t *testing.T) {
 									p.AddEvent(tmpEv)
 
 									// We are now done with the dyn2EVType process so we delete it.
-									p.DynProcesses.Delete(EventType(dyn2EVType))
+									p.DynamicProcesses.Delete(EventType(dyn2EVType))
 									t.Logf("\nsuccessfully deleted process: %v\n", dyn2EVType)
 								case <-ctx.Done():
 									return
@@ -331,7 +331,7 @@ func TestNextEventProcs(t *testing.T) {
 					// Pass the data from the current event into the next event.
 					nextEvent := *ev.NextEvent
 					nextEvent.Data = ev.Data
-					p.EventCh <- nextEvent
+					p.StaticEventCh <- nextEvent
 				case <-ctx.Done():
 					return
 				}
@@ -476,7 +476,7 @@ func BenchmarkSingleProcessEventAndError(b *testing.B) {
 				select {
 				case result := <-p.InCh:
 					testCh <- string(result.Data)
-					p.ErrorCh <- Event{EventType: ERTest, Err: fmt.Errorf("some error:%v", result)}
+					p.ErrorEventCh <- Event{EventType: ERTest, Err: fmt.Errorf("some error:%v", result)}
 				case <-ctx.Done():
 					return
 				}
@@ -498,7 +498,7 @@ func BenchmarkSingleProcessEventAndError(b *testing.B) {
 		rootp.AddEvent(Event{EventType: ETTest,
 			EventKind: EventKindStatic,
 			Data:      []byte("test")})
-		rootp.ErrorCh <- Event{EventType: ERTest,
+		rootp.ErrorEventCh <- Event{EventType: ERTest,
 			EventKind: EventKindError,
 			Err:       fmt.Errorf("some error:%v", "apekatt")}
 		if r := <-testCh; r != "test" {
@@ -525,7 +525,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 			for {
 				select {
 				case result := <-p.InCh:
-					p.EventCh <- Event{EventType: ETTest2, Data: result.Data}
+					p.StaticEventCh <- Event{EventType: ETTest2, Data: result.Data}
 
 				case <-ctx.Done():
 					return
@@ -590,7 +590,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 			for {
 				select {
 				case result := <-p.InCh:
-					p.EventCh <- Event{EventType: ETTest2, Data: result.Data}
+					p.StaticEventCh <- Event{EventType: ETTest2, Data: result.Data}
 				case <-ctx.Done():
 					return
 				}
@@ -607,7 +607,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 			for {
 				select {
 				case result := <-p.InCh:
-					p.EventCh <- Event{EventType: ETTest3, Data: result.Data}
+					p.StaticEventCh <- Event{EventType: ETTest3, Data: result.Data}
 				case <-ctx.Done():
 					return
 				}

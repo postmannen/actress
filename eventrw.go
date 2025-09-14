@@ -40,7 +40,7 @@ func NewEventRW(p *Process, ev *Event, info string) *EventRW {
 	return &m
 }
 
-// Write the data into Event.Data, and put the event into the EventCh to be processed.
+// Write the data into Event.Data, and put the event into the StaticEventCh to be processed.
 func (m *EventRW) Write(b []byte) (int, error) {
 
 	fmt.Printf(" *2 DEBUG WRITE: ev nr: %v, info: %v , eventType: %v, PREPARING for Writing to erw, len(b): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.

@@ -22,15 +22,8 @@ import (
 	"sync"
 )
 
-// processes holds information about what process functions
-// who belongs to what event, and also a map of the started
-// processes.
-type staticProcesses struct {
-	procMap map[EventType]*Process
-}
-
 // Add a new Event and it's process to the processes map.
-func (p *Process) add(et EventType, proc *Process, eventKind EventKind) {
+func (p *Process) addToProcessesMap(et EventType, proc *Process, eventKind EventKind) {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
 	switch eventKind {
@@ -41,19 +34,34 @@ func (p *Process) add(et EventType, proc *Process, eventKind EventKind) {
 		p.StaticProcesses.procMap[et] = proc
 	case EventKindDynamic:
 
-		p.DynProcesses.mu.Lock()
-		defer p.DynProcesses.mu.Unlock()
-		if _, ok := p.DynProcesses.procMap[et]; ok {
-			p.DynProcesses.procMap[et].Cancel()
+		p.DynamicProcesses.mu.Lock()
+		defer p.DynamicProcesses.mu.Unlock()
+		if _, ok := p.DynamicProcesses.procMap[et]; ok {
+			p.DynamicProcesses.procMap[et].Cancel()
 		}
-		p.DynProcesses.procMap[et] = proc
+		p.DynamicProcesses.procMap[et] = proc
+	case EventKindCustom:
+
+		p.CustomProcesses.mu.Lock()
+		defer p.CustomProcesses.mu.Unlock()
+		if _, ok := p.CustomProcesses.procMap[et]; ok {
+			p.CustomProcesses.procMap[et].Cancel()
+		}
+		p.CustomProcesses.procMap[et] = proc
 	case EventKindError:
 		// Check if a process for the same event is defined, and if so we
 		// cancel the current process before we replace it with a new one.
-		if _, ok := p.ErrProcesses.procMap[et]; ok {
-			p.ErrProcesses.procMap[et].Cancel()
+		if _, ok := p.ErrorProcesses.procMap[et]; ok {
+			p.ErrorProcesses.procMap[et].Cancel()
 		}
-		p.ErrProcesses.procMap[et] = proc
+		p.ErrorProcesses.procMap[et] = proc
+	case EventKindSupervisor:
+		// Check if a process for the same event is defined, and if so we
+		// cancel the current process before we replace it with a new one.
+		if _, ok := p.supervisorProcesses.procMap[et]; ok {
+			p.supervisorProcesses.procMap[et].Cancel()
+		}
+		p.supervisorProcesses.procMap[et] = proc
 
 	}
 }
@@ -65,23 +73,6 @@ func (p *Process) add(et EventType, proc *Process, eventKind EventKind) {
 // 	p.procMap[et].cancel()
 // 	delete(p.procMap, et)
 // }
-
-// Checks if the event is defined in the processes map, and returns true if it is.
-func (p *staticProcesses) IsEventDefined(ev EventType) bool {
-	if _, ok := p.procMap[ev]; !ok {
-		return false
-	}
-
-	return true
-}
-
-// Prepare and return a new *processes structure.
-func newStaticProcesses() *staticProcesses {
-	p := staticProcesses{
-		procMap: make(map[EventType]*Process),
-	}
-	return &p
-}
 
 type pidnr int
 type PidVsProcMap map[pidnr]*Process
@@ -162,13 +153,17 @@ type Process struct {
 	// Channel to receive events into the process function.
 	InCh chan Event `json:"-"`
 	// Channel to send events to be picked up by other processes.
-	EventCh chan Event `json:"-"`
+	StaticEventCh chan Event `json:"-"`
 	// Channel to send error events.
-	ErrorCh chan Event `json:"-"`
+	ErrorEventCh chan Event `json:"-"`
 	// Channel for getting the result in tests.
 	TestCh chan Event `json:"-"`
 	// Channel to use for routing events for dynamic processes.
-	DynCh chan Event `json:"-"`
+	DynamicEventCh chan Event `json:"-"`
+	// Channel to use for routing events for custom processes.
+	CustomEventCh chan Event `json:"-"`
+	// Channel to use for routing supervisor events
+	SupervisorEventCh chan Event `json:"-"`
 	// The event type for the process.
 	Event EventType
 	// The event kind of the process
@@ -176,9 +171,13 @@ type Process struct {
 	// Maps for various staticProcess information.
 	StaticProcesses *staticProcesses
 	// Map of dynamic processes
-	DynProcesses *dynProcesses
+	DynamicProcesses *dynamicProcesses
+	// Map of custom processes
+	CustomProcesses *customProcesses
 	// Maps for various errProcess information
-	ErrProcesses *errProcesses
+	ErrorProcesses *errorProcesses
+	// Map of supervisor processes
+	supervisorProcesses *supervisorProcesses
 	// Is this the root process.
 	isRoot bool
 	// Holding all configuration settings.
@@ -204,20 +203,24 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config, etRemoteFunc E
 	ctx, cancel := context.WithCancel(ctx)
 
 	p := Process{
-		fn:              nil,
-		InCh:            make(chan Event),
-		EventCh:         make(chan Event),
-		ErrorCh:         make(chan Event),
-		TestCh:          make(chan Event),
-		DynCh:           make(chan Event),
-		Event:           ETRoot,
-		StaticProcesses: newStaticProcesses(),
-		DynProcesses:    newDynProcesses(),
-		ErrProcesses:    newErrProcesses(),
-		isRoot:          true,
-		Config:          conf,
-		pids:            newPids(),
-		Cancel:          cancel,
+		fn:                  nil,
+		InCh:                make(chan Event),
+		StaticEventCh:       make(chan Event),
+		ErrorEventCh:        make(chan Event),
+		TestCh:              make(chan Event),
+		DynamicEventCh:      make(chan Event),
+		CustomEventCh:       make(chan Event),
+		SupervisorEventCh:   make(chan Event),
+		Event:               ETRoot,
+		StaticProcesses:     newStaticProcesses(),
+		DynamicProcesses:    newDynamicProcesses(),
+		CustomProcesses:     newCustomProcesses(),
+		ErrorProcesses:      newErrorProcesses(),
+		supervisorProcesses: newsuperVisorProcesses(),
+		isRoot:              true,
+		Config:              conf,
+		pids:                newPids(),
+		Cancel:              cancel,
 	}
 
 	p.PID = p.pids.nr
@@ -229,18 +232,6 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config, etRemoteFunc E
 	// Register and start all the standard child processes
 	// that should spawn off the root process
 
-	NewProcess(ctx, &p, ETProfiling, EventKindStatic, etProfilingFn).Act()
-
-	if p.Config.CustomEvents {
-		NewProcess(ctx, &p, ETCustomEvent, EventKindStatic, ETCustomEventFn).Act()
-		NewProcess(ctx, &p, ETWatchEventFile, EventKindStatic, wrapperETWatchEventFileFn(p.Config.CustomEventsPath, ".json")).Act()
-	}
-
-	// Starting up the routers first.
-	NewProcess(ctx, &p, ETRouter, EventKindStatic, etRouterFn).Act()
-	NewProcess(ctx, &p, ERRouter, EventKindError, erRouterFn).Act()
-	NewProcess(ctx, &p, EDRouter, EventKindDynamic, edRouterFn).Act()
-
 	// Starting error handling processes.
 	NewProcess(ctx, &p, ERLog, EventKindError, erLogFn).Act()
 	NewProcess(ctx, &p, ERDebug, EventKindError, erDebugFn).Act()
@@ -248,6 +239,19 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config, etRemoteFunc E
 	NewProcess(ctx, &p, ERTest, EventKindError, erTestFn).Act()
 	NewProcess(ctx, &p, ERNone, EventKindError, erNoneFn).Act()
 	NewProcess(ctx, &p, ETPrint, EventKindStatic, etPrintFn).Act()
+
+	NewProcess(ctx, &p, ETRouter, EventKindStatic, etRouterFn).Act()
+	NewProcess(ctx, &p, ERRouter, EventKindError, erRouterFn).Act()
+	NewProcess(ctx, &p, EDRouter, EventKindDynamic, edRouterFn).Act()
+	NewProcess(ctx, &p, ECRouter, EventKindCustom, ecRouterFn).Act()
+	NewProcess(ctx, &p, ESRouter, EventKindSupervisor, esRouterFn).Act()
+
+	NewProcess(ctx, &p, ETProfiling, EventKindStatic, etProfilingFn).Act()
+
+	if p.Config.CustomEvents {
+		NewProcess(ctx, &p, ETProcessFromData, EventKindStatic, etProcessFromDataFn).Act()
+		NewProcess(ctx, &p, ETWatchEventFile, EventKindStatic, wrapperETWatchEventFileFn(p.Config.CustomEventsPath, ".json")).Act()
+	}
 
 	// Starting the remainding processes.
 	NewProcess(ctx, &p, ETOsSignal, EventKindStatic, etOsSignalFn).Act()
@@ -298,25 +302,29 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config, etRemoteFunc E
 func NewProcess(ctx context.Context, parentP *Process, event EventType, kind EventKind, fn ETFunc) *Process {
 	ctx, cancel := context.WithCancel(ctx)
 	p := Process{
-		fn:              nil,
-		InCh:            make(chan Event),
-		EventCh:         parentP.EventCh,
-		ErrorCh:         parentP.ErrorCh,
-		TestCh:          parentP.TestCh,
-		DynCh:           parentP.DynCh,
-		Event:           event,
-		Kind:            kind,
-		StaticProcesses: parentP.StaticProcesses,
-		DynProcesses:    parentP.DynProcesses,
-		ErrProcesses:    parentP.ErrProcesses,
-		isRoot:          false,
-		Config:          parentP.Config,
-		pids:            parentP.pids,
-		PID:             parentP.pids.next(),
-		Cancel:          cancel,
+		fn:                  nil,
+		InCh:                make(chan Event),
+		StaticEventCh:       parentP.StaticEventCh,
+		ErrorEventCh:        parentP.ErrorEventCh,
+		TestCh:              parentP.TestCh,
+		DynamicEventCh:      parentP.DynamicEventCh,
+		CustomEventCh:       parentP.CustomEventCh,
+		SupervisorEventCh:   parentP.SupervisorEventCh,
+		Event:               event,
+		Kind:                kind,
+		StaticProcesses:     parentP.StaticProcesses,
+		DynamicProcesses:    parentP.DynamicProcesses,
+		CustomProcesses:     parentP.CustomProcesses,
+		ErrorProcesses:      parentP.ErrorProcesses,
+		supervisorProcesses: parentP.supervisorProcesses,
+		isRoot:              false,
+		Config:              parentP.Config,
+		pids:                parentP.pids,
+		PID:                 parentP.pids.next(),
+		Cancel:              cancel,
 	}
 
-	p.add(event, &p, kind)
+	p.addToProcessesMap(event, &p, kind)
 
 	if fn != nil {
 		p.fn = fn(ctx, &p)
@@ -351,33 +359,47 @@ func (p *Process) AddEvent(event Event) {
 
 	// The event is
 	switch event.EventKind {
+	case EventKindSupervisor:
+		p.addEventSuperVisor(event)
 	case EventKindStatic:
 		p.addEventStatic(event)
 	case EventKindError:
 		p.addEventError(event)
 	case EventKindDynamic:
 		p.addEventDynamic(event)
+	case EventKindCustom:
+		p.addEventCustom(event)
 	default:
 		panic(fmt.Sprintf("unknown EventKind: %v", event.EventKind))
 	}
 }
 
 // Will add an event to be handled by the processes.
+func (p *Process) addEventSuperVisor(event Event) {
+	p.SupervisorEventCh <- event
+}
+
+// Will add an event to be handled by the processes.
 func (p *Process) addEventStatic(event Event) {
-	p.EventCh <- event
+	p.StaticEventCh <- event
 }
 
 // Will add an event to be handled by the processes.
 func (p *Process) addEventDynamic(event Event) {
-	p.DynCh <- event
+	p.DynamicEventCh <- event
+}
+
+// Will add an event to be handled by the processes.
+func (p *Process) addEventCustom(event Event) {
+	p.CustomEventCh <- event
 }
 
 // Will add an error to be handled by the error processes.
 func (p *Process) addEventError(event Event) {
-	p.ErrorCh <- event
+	p.ErrorEventCh <- event
 }
 
-// Will start the ETFunc attacched to the process.
+// Will start the ETFunc attached to the process.
 //
 // If no ETFunc is defined for the process will just return
 // after calling this function. The process can still be used

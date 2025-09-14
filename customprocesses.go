@@ -21,13 +21,11 @@ import (
 	"log"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // Holds information about what process functions who belongs to what
 // event, and also a map of the started processes.
-type dynamicProcesses struct {
+type customProcesses struct {
 	procMap map[EventType]*Process
 	mu      sync.Mutex
 }
@@ -37,7 +35,7 @@ type dynamicProcesses struct {
 // *******************************************************************
 // TODO: Consider if we still need this function. It is not in use.
 // *******************************************************************
-func (p *dynamicProcesses) Add(et EventType, proc *Process) {
+func (p *customProcesses) Add(et EventType, proc *Process) {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
 	p.mu.Lock()
@@ -49,7 +47,7 @@ func (p *dynamicProcesses) Add(et EventType, proc *Process) {
 }
 
 // Delete an Event and it's process from the processes map.
-func (p *dynamicProcesses) Delete(et EventType) {
+func (p *customProcesses) Delete(et EventType) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.procMap[et].Cancel()
@@ -58,7 +56,7 @@ func (p *dynamicProcesses) Delete(et EventType) {
 }
 
 // Checks if the event is defined in the processes map, and returns true if it is.
-func (p *dynamicProcesses) IsEventDefined(ev EventType) bool {
+func (p *customProcesses) IsEventDefined(ev EventType) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if _, ok := p.procMap[ev]; !ok {
@@ -68,36 +66,30 @@ func (p *dynamicProcesses) IsEventDefined(ev EventType) bool {
 	return true
 }
 
-// Prepare and return a new *dynamicProcesses structure.
-func newDynamicProcesses() *dynamicProcesses {
-	p := dynamicProcesses{
+// Prepare and return a new *customProcesses structure.
+func newCustomProcesses() *customProcesses {
+	p := customProcesses{
 		procMap: make(map[EventType]*Process),
 	}
 	return &p
-}
-
-// Will create and return a new UUID.
-func NewUUID() string {
-	u := uuid.New()
-	return u.String()
 }
 
 // ------------------------------------------------------------------------------
 // Events and event functions.
 // ------------------------------------------------------------------------------
 
-// Router for normal events.
-const EDRouter EventType = "EDRouter"
+// Router for custom events.
+const ECRouter EventType = "ECRouter"
 
 // Process function for routing and handling events. Will check
 // and route the event to the correct process.
-func edRouterFn(ctx context.Context, p *Process) func() {
+func ecRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		eventNr := 0
 
 		for {
 			select {
-			case ev := <-p.DynamicEventCh:
+			case ev := <-p.CustomEventCh:
 				// If there is a next event defined, we make a copy of all the fields  of the current event,
 				// and put that as the previousEvent on the next event. We can use this information later
 				// if need to check something in the previous event.
@@ -110,28 +102,28 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 				eventNr++
 				ev.Nr = eventNr
 
-				// Dynamic processes can take a little longer to start up and be
+				// Custom processes can take a little longer to start up and be
 				// registered in the map. We check here if process is registred,
 				// and if it is not we retry.
 				// The checking is done in a go routine so the router don't block
 				// here waiting, and we continue with the next event in the queue.
-				if _, ok := p.DynamicProcesses.procMap[ev.EventType]; !ok {
+				if _, ok := p.CustomProcesses.procMap[ev.EventType]; !ok {
 					go func(ev Event) {
 						// Try to 3 times to deliver the message.
 						for i := 0; i < 3; i++ {
-							_, ok := p.DynamicProcesses.procMap[ev.EventType]
+							_, ok := p.CustomProcesses.procMap[ev.EventType]
 
 							if !ok {
 								p.AddEvent(Event{EventType: ERLog,
 									EventKind: EventKindError,
-									Err:       fmt.Errorf("edRouter: on %v found no process registered for the event type : %v, ev.DstNode: %v", p.Config.NodeName, ev.EventType, ev.DstNode)})
+									Err:       fmt.Errorf("ecRouter: on %v found no process registered for the event type : %v, ev.DstNode: %v", p.Config.NodeName, ev.EventType, ev.DstNode)})
 								time.Sleep(time.Millisecond * 250)
 								continue
 							}
 
 							// Process is now registred, so we can safely put
 							//the event on the InCh of the process.
-							p.DynamicProcesses.procMap[ev.EventType].InCh <- ev
+							p.CustomProcesses.procMap[ev.EventType].InCh <- ev
 
 							return
 						}
@@ -145,7 +137,12 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 				}
 
 				// Process was registered. Deliver the event to the process InCh.
-				p.DynamicProcesses.procMap[ev.EventType].InCh <- ev
+				log.Printf(" -------- DEBUG1 %v ---------p.CustomProcesses.procMap[ev.EventType] : %v\n", p.Config.NodeName, p.CustomProcesses.procMap[ev.EventType])
+				log.Printf(" -------- DEBUG2 %v---------p ev.EventType : %v\n", p.Config.NodeName, ev.EventType)
+				log.Printf(" -------- DEBUG3.1 %v---------p.CustomProcesses.procMap : %+v\n", p.Config.NodeName, p.CustomProcesses.procMap)
+				log.Printf(" -------- DEBUG3 %v---------p.CustomProcesses.procMap[ev.EventType].InCh : %v\n", p.Config.NodeName, p.CustomProcesses.procMap[ev.EventType].InCh)
+
+				p.CustomProcesses.procMap[ev.EventType].InCh <- ev
 
 			case <-ctx.Done():
 				p.AddEvent(Event{
@@ -160,4 +157,39 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 	}
 
 	return fn
+}
+
+// Primarily used for testing to check that the ECRouter properly routes events, and that
+// custom processes start up correctly.
+const ECGeneralDelivery EventType = "ECGeneralDelivery"
+
+// Primarily used for testing to check that the ECRouter properly routes events, and that
+// custom processes start up correctly.
+func ecGeneralDeliveryFn(ctx context.Context, p *Process) func() {
+	fn := func() {
+
+		for {
+			select {
+			case ev := <-p.InCh:
+				// Primarily used for tests. Will just forward the event data to defined NextEvent.
+				if ev.NextEvent != nil {
+					nextEv := ev.NextEvent
+					nextEv.Data = ev.Data
+					p.AddEvent(*nextEv)
+				}
+
+			case <-ctx.Done():
+				p.AddEvent(Event{
+					EventType: ERLog,
+					EventKind: EventKindError,
+					Err:       fmt.Errorf("info: got ctx.Done"),
+				})
+
+				return
+			}
+		}
+	}
+
+	return fn
+
 }

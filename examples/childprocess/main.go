@@ -42,7 +42,7 @@ func main() {
 									testCh <- string(dots)
 
 									// Also create an informational error message.
-									p.ErrorCh <- actress.Event{EventType: actress.ERDebug, Err: fmt.Errorf("info: done with the acting")}
+									p.ErrorEventCh <- actress.Event{EventType: actress.ERDebug, Err: fmt.Errorf("info: done with the acting")}
 
 								case <-ctx.Done():
 									return
@@ -55,7 +55,7 @@ func main() {
 					actress.NewProcess(ctx, p, ETTest2, actress.EventKindStatic, test2Func).Act()
 
 					upper := strings.ToUpper(string(result.Data))
-					p.EventCh <- actress.Event{EventType: ETTest2, Data: []byte(upper)}
+					p.StaticEventCh <- actress.Event{EventType: ETTest2, Data: []byte(upper)}
 
 				case <-ctx.Done():
 					return

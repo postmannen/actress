@@ -146,17 +146,32 @@ func main() {
     // Pass in an event destined for an ETTest1 EventType process, and also specify
     // the next event to be used when passing the result on from ETTest1 to the next
     // process which here is ETTest2.
-    rootAct.AddEvent(actress.Event{EventType: ETTest1, Data: []byte("test"), NextEvent: &actress.Event{EventType: ETTest2}})
+    rootAct.AddEvent(actress.Event{
+        EventType: ETTest1,
+        Data: []byte("test"),
+        NextEvent: &actress.Event{
+            EventType: ETTest2}})
 
     // Wait and receive the result from the ETTest2 process.
     fmt.Printf("The result: %v\n", <-testCh)
-
-    time.Sleep(time.Second * 2)
-    cancel()
 }
 ```
 
 ## Details
+
+Short intro about the Events.
+
+The event for all processes, both static, dynamic, error, and supervisor uses the same event type and structure.
+What makes an event for example a Static or an Error is the EventKind field of the Event which can have values like **EventKindStatic**, **EventKindDynamic**, **EventKindError** or **EventKindSupervisor**.
+
+The reason for splitting them up with the use of EventKind are a **separation** and use of **mutex'es** , for example if the event routing logic hangs on static events, it will not affect the other event kinds, so we are able to for example send errors if any of the other routers are having trouble or have massive load.
+
+### Where to use an actor process of a specific kind ?
+
+**EventKindStatic processes**, should only be used for processes/actors defined at startup. Event lookups for finding the right actor **are not protected by a mutex**.  
+**EventKindDynamic processes**, Can be used both for startup and runtime defined actors, but prefer static at startup unless you have a really good reason to not do it :). Event lookups for finding the right actor **are protected by a mutex**.
+**EventKindError processes** For error logging and handling.
+**EventKindSupervisor processes** For control logic and information about the whole Actress system.
 
 ### Custom Events Processes
 
@@ -202,6 +217,6 @@ p.AddEvent(Event{EventType: EventType("ETBleeping"), NextEvent: &Event{EventType
 
 ## Dynamic Processes
 
-The purpose of dynamic processes is to have short lived processes that can be quickly started, and removed again when it's job is done. The only difference between a "normal" process and a dynamic process are that the dynamic processes have a mutex in the processes map DynProcesses so we also can delete the processes when they are no longer needed.
+The purpose of dynamic processes is to have short lived processes that can be quickly started, and removed again when it's job is done. The only difference between a "normal" process and a dynamic process are that the dynamic processes have a mutex in the processes map DynamicProcesses so we also can delete the processes when they are no longer needed.
 
 A typical example could be that there is a processes that needs to communicate in some other way with another process than cant be done with the current process's event channel. We can then spawn a dynamic process to take care of that. Check out the test and files in the examples directory. One process can spawn as many dynamic processes as it needs.
