@@ -117,7 +117,7 @@ func main() {
             for {
                 select {
                 case result := <-p.InCh:
-                    dots := string(result.Data) + "                 
+                    dots := string(result.Data) + "..."                 
                     // Send the result on the testCh so we are able to to receive it in main().
                     testCh <- string(dots)
 
