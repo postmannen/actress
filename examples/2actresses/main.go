@@ -83,12 +83,14 @@ func main() {
 	// process which here is ETTest2.
 	rootAct.AddEvent(actress.Event{EventType: ETTest1,
 		EventKind: actress.EventKindStatic,
-		Data:      []byte("test"), NextEvent: &actress.Event{EventType: ETTest2,
-			EventKind: actress.EventKindStatic}})
+		Data:      []byte("test"),
+		NextEvent: &actress.Event{EventType: ETTest2,
+			EventKind: actress.EventKindStatic},
+	},
+	)
 
 	// Wait and receive the result from the ETTest2 process.
 	fmt.Printf("The result: %v\n", <-testCh)
 
 	time.Sleep(time.Second * 2)
-	cancel()
 }

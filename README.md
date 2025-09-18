@@ -73,8 +73,7 @@ import (
     "fmt"
     "log"
     "strings"
-    "time"
-
+    "time"  
     "github.com/postmannen/actress"
 )
 
@@ -85,11 +84,10 @@ func main() {
     // Create a new root process.
     cfg, _ := actress.NewConfig()
     rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
-    rootAct.Act()
-    
+    // Create a test channel where we receive the end result.
     testCh := make(chan string)
 
-    // Define two event types for two processes.
+    // Define two event typess for two processes.
     const ETTest1 actress.EventType = "ETTest1"
     const ETTest2 actress.EventType = "ETTest2"
 
@@ -102,7 +100,9 @@ func main() {
                     upper := strings.ToUpper(string(ev.Data))
                     // Pass on the processing to the next process, and use the NextEvent we have specified in main
                     // for the EventType, and add the result of ToUpper to the data field.
-                    p.AddEvent(actress.Event{EventType: ev.NextEvent.EventType, Data: []byte(upper)})
+                    p.AddEvent(actress.Event{EventType: ev.NextEvent.EventType,
+                        EventKind: ev.NextEvent.EventKind,
+                        Data:      []byte(upper)})
                 case <-ctx.Done():
                     return
                 }
@@ -117,13 +117,14 @@ func main() {
             for {
                 select {
                 case result := <-p.InCh:
-                    dots := string(result.Data) + "..."
-
+                    dots := string(result.Data) + "                 
                     // Send the result on the testCh so we are able to to receive it in main().
                     testCh <- string(dots)
 
                     // Also create an informational error message.
-                    p.AddError(actress.Event{EventType: actress.ERDebug, Err: fmt.Errorf("info: done with the acting")})
+                    p.AddEvent(actress.Event{EventType: actress.ERDebug,
+                        EventKind: actress.EventKindError,
+                        Err:       fmt.Errorf("info: done with the acting")})
 
                 case <-ctx.Done():
                     return
@@ -134,8 +135,8 @@ func main() {
     }
 
     // Register the event types and event function to processes.
-    actress.NewProcess(ctx, *rootAct, ETTest1, actress.EventKindStatic, test1Func).Act()
-    actress.NewProcess(ctx, *rootAct, ETTest2, actress.EventKindStatic, test2Func).Act()
+    actress.NewProcess(ctx, rootAct, ETTest1, actress.EventKindStatic, test1Func).Act()
+    actress.NewProcess(ctx, rootAct, ETTest2, actress.EventKindStatic, test2Func).Act()
 
     // Start all the registered processes.
     err := rootAct.Act()
@@ -146,14 +147,18 @@ func main() {
     // Pass in an event destined for an ETTest1 EventType process, and also specify
     // the next event to be used when passing the result on from ETTest1 to the next
     // process which here is ETTest2.
-    rootAct.AddEvent(actress.Event{
-        EventType: ETTest1,
-        Data: []byte("test"),
-        NextEvent: &actress.Event{
-            EventType: ETTest2}})
+    rootAct.AddEvent(actress.Event{EventType: ETTest1,
+        EventKind: actress.EventKindStatic,
+        Data:      []byte("test"),
+        NextEvent: &actress.Event{EventType: ETTest2,
+            EventKind: actress.EventKindStatic},
+    },
+    )
 
     // Wait and receive the result from the ETTest2 process.
     fmt.Printf("The result: %v\n", <-testCh)
+
+    time.Sleep(time.Second * 2)
 }
 ```
 
