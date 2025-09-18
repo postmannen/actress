@@ -3,12 +3,13 @@ package actress
 import (
 	"context"
 	"fmt"
-	"log"
+	"sync"
 
 	"github.com/fxamacker/cbor/v2"
 )
 
 type supervisorProcesses struct {
+	mu      sync.Mutex
 	procMap map[EventType]*Process
 }
 
@@ -20,7 +21,9 @@ func newsuperVisorProcesses() *supervisorProcesses {
 	return &p
 }
 
-// ----------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
+// Events and event functions, ESRouter
+// ------------------------------------------------------------------------------
 
 // Router for supervisor events.
 const ESRouter EventType = "ESRouter"
@@ -29,6 +32,8 @@ const ESRouter EventType = "ESRouter"
 // and route the event to the correct process.
 func esRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		eventNr := 0
 
 		for {
@@ -47,19 +52,29 @@ func esRouterFn(ctx context.Context, p *Process) func() {
 				ev.Nr = eventNr
 
 				// Check if process is registred and valid.
-				if _, ok := p.supervisorProcesses.procMap[ev.EventType]; !ok {
-					p.AddEvent(Event{EventType: ERLog,
+				p.supervisorProcesses.mu.Lock()
+				_, ok := p.supervisorProcesses.procMap[ev.EventType]
+				p.supervisorProcesses.mu.Unlock()
+
+				if !ok {
+					p.AddEvent(Event{EventType: ERFatal,
 						EventKind: EventKindError,
 						Err:       fmt.Errorf("etRouter: on %v found no process registered for the event type : %v", p.Config.NodeName, ev.EventType)})
 				}
 
-				// Process was registered. Deliver the event to the process InCh.
-				log.Printf(" -------- DEBUG1 %v ---------p.supervisorProcesses.procMap[ev.EventType] : %v\n", p.Config.NodeName, p.supervisorProcesses.procMap[ev.EventType])
-				log.Printf(" -------- DEBUG2 %v---------p ev.EventType : %v\n", p.Config.NodeName, ev.EventType)
-				log.Printf(" -------- DEBUG3 %v---------p.supervisorProcesses.procMap[ev.EventType].InCh : %v\n", p.Config.NodeName, p.supervisorProcesses.procMap[ev.EventType].InCh)
-				p.supervisorProcesses.procMap[ev.EventType].InCh <- ev
+				// // Process was registered. Deliver the event to the process InCh.
+				// log.Printf(" -------- DEBUG1 %v ---------p.supervisorProcesses.procMap[ev.EventType] : %v\n", p.Config.NodeName, p.supervisorProcesses.procMap[ev.EventType])
+				// log.Printf(" -------- DEBUG2 %v---------p ev.EventType : %v\n", p.Config.NodeName, ev.EventType)
+				// log.Printf(" -------- DEBUG3 %v---------p.supervisorProcesses.procMap[ev.EventType].InCh : %v\n", p.Config.NodeName, p.supervisorProcesses.procMap[ev.EventType].InCh)
 
-			case <-ctx.Done():
+				p.supervisorProcesses.mu.Lock()
+				inCh := p.supervisorProcesses.procMap[ev.EventType].InCh
+				p.supervisorProcesses.mu.Unlock()
+
+				fmt.Printf("DEBUG: Routing event, %v, node: %v, eventType: %v, .Inch: %v\n", p.Event, p.Config.NodeName, ev.EventType, inCh)
+				inCh <- ev
+
+			case <-p.Ctx.Done():
 				p.AddEvent(Event{
 					EventType: ERLog,
 					EventKind: EventKindError,
@@ -74,87 +89,107 @@ func esRouterFn(ctx context.Context, p *Process) func() {
 	return fn
 }
 
+// ------------------------------------------------------------------------------
+// Events and event functions, Process handling
+// ------------------------------------------------------------------------------
+
 // Handles information about the currently running processes in the local Actress system.
 const ESProcesses EventType = "ESProcesses"
 
-// ProcessesAllMarshaled are used when we want to to send or receive the content of all
-// procecess maps by serializing the whole structure.
-type ProcessesAllMarshaled struct {
-	Static     []byte
-	Dynamic    []byte
-	Error      []byte
-	Supervisor []byte
+// Will instruct to get all information about all processes.
+const InstructionESProcessesAdd Instruction = "InstructionESProcessesAdd"
+const InstructionESProcessesDelete Instruction = "InstructionESProcessesDelete"
+const InstructionESProcessesGetAll Instruction = "InstructionESProcessesGetAll"
+
+type esProcessesMapDataIn struct {
+	EventType EventType
+	EventKind EventKind
 }
 
-// Will instruct to get all information about all processes.
-const InstructionGetAllProcesses Instruction = "getAllProcesses"
-const InstructionNone Instruction = ""
+type ESProcessesMap map[EventType]EventKind
 
 // ETFunc for handling information about the currently running processes in the local Actress system.
-func esProcessesFn(rootP *Process) ETFunc {
+func esProcessesFn() ETFunc {
 	ETfn := func(ctx context.Context, p *Process) func() {
 		fn := func() {
+			defer p.Stop()
+
+			// The map of all the running processes.
+			processMap := make(ESProcessesMap)
 
 			for {
 				select {
 				case ev := <-p.InCh:
-					m := ProcessesAllMarshaled{}
-					var err error
 
 					switch ev.Instruction {
+					// Add The received data about a process to the map.
+					case InstructionESProcessesAdd:
+						md := esProcessesMapDataIn{}
 
-					// Will get all information about all processes
-					case InstructionGetAllProcesses:
-						m.Static, err = cbor.Marshal(rootP.StaticProcesses.procMap)
+						err := cbor.Unmarshal(ev.Data, &md)
 						if err != nil {
-							p.AddEvent(Event{EventType: ERFatal, Err: fmt.Errorf("esProcesses: failed to marshal static procMap: %v", err)})
-						}
-						rootP.DynamicProcesses.mu.Lock()
-						m.Dynamic, err = cbor.Marshal(rootP.DynamicProcesses.procMap)
-						rootP.DynamicProcesses.mu.Unlock()
-						if err != nil {
-							p.AddEvent(Event{EventType: ERFatal, Err: fmt.Errorf("esProcesses: failed to marshal dynamic procMap: %v", err)})
-						}
-						m.Error, err = cbor.Marshal(rootP.ErrorProcesses.procMap)
-						if err != nil {
-							p.AddEvent(Event{EventType: ERFatal, Err: fmt.Errorf("esProcesses: failed to marshal error procMap: %v", err)})
-						}
-						m.Supervisor, err = cbor.Marshal(rootP.supervisorProcesses.procMap)
-						if err != nil {
-							p.AddEvent(Event{EventType: ERFatal, Err: fmt.Errorf("esProcesses: failed to marshal supervisor procMap: %v", err)})
+							p.AddEvent(Event{
+								EventType: ERLog,
+								EventKind: EventKindError,
+								Err:       fmt.Errorf("failed to unmarshal esProcesses map in data: %v", err),
+							})
 						}
 
-						bAll, err := cbor.Marshal(m)
-						if err != nil {
-							p.AddEvent(Event{EventType: ERFatal, Err: fmt.Errorf("esProcesses: failed to marshal bAll map: %v", err)})
-						}
+						processMap[md.EventType] = md.EventKind
 
-						fmt.Printf("%v\n", bAll)
+						// fmt.Printf("DEBUG: esProcessesfn, processesMap: %+v\n", processMap)
 
-						// For now just check the next event, and do it as the next thing.
+						// Nothing to output are produced so we just add for the .NextEvent if defined.
 						if ev.NextEvent != nil {
-							nextEv := ev.NextEvent
-							nextEv.Data = ev.Data
-							p.AddEvent(*nextEv)
+							p.AddEvent(*ev.NextEvent)
 						}
 
-					// Primarily used for tests. Will just forward the event data to defined NextEvent.
-					case InstructionNone:
+					case InstructionESProcessesDelete:
+						md := esProcessesMapDataIn{}
+
+						err := cbor.Unmarshal(ev.Data, &md)
+						if err != nil {
+							p.AddEvent(Event{
+								EventType: ERLog,
+								EventKind: EventKindError,
+								Err:       fmt.Errorf("failed to unmarshal esProcesses map in data: %v", err),
+							})
+						}
+
+						delete(processMap, p.Event)
+
+						// Nothing to output are produced so we just add for the .NextEvent if defined.
 						if ev.NextEvent != nil {
-							nextEv := ev.NextEvent
-							nextEv.Data = ev.Data
-							p.AddEvent(*nextEv)
+							p.AddEvent(*ev.NextEvent)
+						}
+
+					// Dump the content of the whole processes map, and send it with .NextEvent.
+					case InstructionESProcessesGetAll:
+						b, err := cbor.Marshal(processMap)
+						if err != nil {
+							p.AddEvent(Event{
+								EventType: ERLog,
+								EventKind: EventKindError,
+								Err:       fmt.Errorf("failed to marshal esProcesses for push all: %v", err),
+							})
+						}
+
+						nEv := ev.NextEvent
+						nEv.Data = b
+
+						if ev.NextEvent != nil {
+							p.AddEvent(*nEv)
 						}
 
 					default:
 						p.AddEvent(Event{
-							EventType: ERLog,
+							EventType: ERFatal,
 							EventKind: EventKindError,
-							Err:       fmt.Errorf("supervisorprocesses: not recognized instruction"),
+							Err:       fmt.Errorf("esProcesses: not a defined instruction: %v", ev.Instruction),
 						})
 					}
 
-				case <-ctx.Done():
+				case <-p.Ctx.Done():
 					p.AddEvent(Event{
 						EventType: ERLog,
 						EventKind: EventKindError,

@@ -41,6 +41,7 @@ func NewConfig() (*Config, *flag.FlagSet) {
 		CustomEvents:     false,
 		Metrics:          false,
 		CustomEventsPath: "customevents",
+		NodeName:         "replaceme",
 	}
 
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
@@ -48,6 +49,7 @@ func NewConfig() (*Config, *flag.FlagSet) {
 	fs.BoolVar(&c.CustomEvents, "customEvents", CheckEnv("CUSTOMEVENTS", c.CustomEvents).(bool), "custom events (env CUSTOMEVENTS)")
 	fs.BoolVar(&c.Metrics, "metrics", CheckEnv("METRICS", c.Metrics).(bool), "metrics (env METRICS)")
 	fs.StringVar(&c.CustomEventsPath, "customEventsPath", CheckEnv("CUSTOMEVENTSPATH", c.CustomEventsPath).(string), "custom events path (env CUSTOMEVENTSPATH)")
+	fs.StringVar((*string)(&c.NodeName), "nodeName", CheckEnv("NODENAME", string(c.NodeName)).(string), "nodename (env NODENAME)")
 
 	return &c, fs
 }

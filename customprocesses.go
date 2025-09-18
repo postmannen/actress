@@ -85,6 +85,7 @@ const ECRouter EventType = "ECRouter"
 // and route the event to the correct process.
 func ecRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
 		eventNr := 0
 
 		for {
@@ -107,11 +108,16 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 				// and if it is not we retry.
 				// The checking is done in a go routine so the router don't block
 				// here waiting, and we continue with the next event in the queue.
-				if _, ok := p.CustomProcesses.procMap[ev.EventType]; !ok {
+				p.CustomProcesses.mu.Lock()
+				_, ok := p.CustomProcesses.procMap[ev.EventType]
+				p.CustomProcesses.mu.Unlock()
+				if !ok {
 					go func(ev Event) {
 						// Try to 3 times to deliver the message.
 						for i := 0; i < 3; i++ {
+							p.CustomProcesses.mu.Lock()
 							_, ok := p.CustomProcesses.procMap[ev.EventType]
+							p.CustomProcesses.mu.Unlock()
 
 							if !ok {
 								p.AddEvent(Event{EventType: ERLog,
@@ -123,7 +129,9 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 
 							// Process is now registred, so we can safely put
 							//the event on the InCh of the process.
+							p.CustomProcesses.mu.Lock()
 							p.CustomProcesses.procMap[ev.EventType].InCh <- ev
+							p.CustomProcesses.mu.Unlock()
 
 							return
 						}
@@ -137,14 +145,19 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 				}
 
 				// Process was registered. Deliver the event to the process InCh.
-				log.Printf(" -------- DEBUG1 %v ---------p.CustomProcesses.procMap[ev.EventType] : %v\n", p.Config.NodeName, p.CustomProcesses.procMap[ev.EventType])
-				log.Printf(" -------- DEBUG2 %v---------p ev.EventType : %v\n", p.Config.NodeName, ev.EventType)
-				log.Printf(" -------- DEBUG3.1 %v---------p.CustomProcesses.procMap : %+v\n", p.Config.NodeName, p.CustomProcesses.procMap)
-				log.Printf(" -------- DEBUG3 %v---------p.CustomProcesses.procMap[ev.EventType].InCh : %v\n", p.Config.NodeName, p.CustomProcesses.procMap[ev.EventType].InCh)
+				// log.Printf(" -------- DEBUG1 %v ---------p.CustomProcesses.procMap[ev.EventType] : %v\n", p.Config.NodeName, p.CustomProcesses.procMap[ev.EventType])
+				// log.Printf(" -------- DEBUG2 %v---------p ev.EventType : %v\n", p.Config.NodeName, ev.EventType)
+				// log.Printf(" -------- DEBUG3.1 %v---------p.CustomProcesses.procMap : %+v\n", p.Config.NodeName, p.CustomProcesses.procMap)
+				// log.Printf(" -------- DEBUG3 %v---------p.CustomProcesses.procMap[ev.EventType].InCh : %v\n", p.Config.NodeName, p.CustomProcesses.procMap[ev.EventType].InCh)
 
-				p.CustomProcesses.procMap[ev.EventType].InCh <- ev
+				p.CustomProcesses.mu.Lock()
+				inCh := p.CustomProcesses.procMap[ev.EventType].InCh
+				p.CustomProcesses.mu.Unlock()
 
-			case <-ctx.Done():
+				fmt.Printf("DEBUG: Routing event, %v, node: %v, eventType: %v, .Inch: %v\n", p.Event, p.Config.NodeName, ev.EventType, inCh)
+				inCh <- ev
+
+			case <-p.Ctx.Done():
 				p.AddEvent(Event{
 					EventType: ERLog,
 					EventKind: EventKindError,
@@ -167,6 +180,7 @@ const ECGeneralDelivery EventType = "ECGeneralDelivery"
 // custom processes start up correctly.
 func ecGeneralDeliveryFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
 
 		for {
 			select {
@@ -178,7 +192,7 @@ func ecGeneralDeliveryFn(ctx context.Context, p *Process) func() {
 					p.AddEvent(*nextEv)
 				}
 
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				p.AddEvent(Event{
 					EventType: ERLog,
 					EventKind: EventKindError,

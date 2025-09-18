@@ -60,6 +60,8 @@ const ERRouter EventType = "ERRouter"
 // Process function for routing and handling events.
 func erRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		eventNr := 0
 
 		for {
@@ -77,9 +79,12 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 				eventNr++
 				e.Nr = eventNr
 
-				p.ErrorProcesses.procMap[e.EventType].InCh <- e
+				inCh := p.ErrorProcesses.procMap[e.EventType].InCh
 
-			case <-ctx.Done():
+				fmt.Printf("DEBUG: Routing event, %v, node: %v, eventType: %v, .Inch: %v\n", p.Event, p.Config.NodeName, e.EventType, inCh)
+				inCh <- e
+
+			case <-p.Ctx.Done():
 				// NB: Bevare of this one getting stuck if for example the error
 				// handling is down. Maybe add a timeout if blocking to long,
 				// and then send elsewhere if it becomes a problem.
@@ -100,6 +105,8 @@ const ERLog EventType = "ERLog"
 
 func erLogFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case er := <-p.InCh:
@@ -107,7 +114,7 @@ func erLogFn(ctx context.Context, p *Process) func() {
 				go func() {
 					log.Printf("error for logging received: %v\n", er.Err)
 				}()
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				return
 			}
 		}
@@ -121,6 +128,8 @@ const ERDebug EventType = "ERDebug"
 
 func erDebugFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case er := <-p.InCh:
@@ -128,7 +137,7 @@ func erDebugFn(ctx context.Context, p *Process) func() {
 				go func() {
 					log.Printf("error for debug logging received: %v\n", er.Err)
 				}()
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				return
 			}
 		}
@@ -142,6 +151,8 @@ const ERFatal EventType = "ERFatal"
 
 func erFatalFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case er := <-p.InCh:
@@ -149,7 +160,7 @@ func erFatalFn(ctx context.Context, p *Process) func() {
 				go func() {
 					log.Fatalf("error for fatal logging received: %v\n", er.Err)
 				}()
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				return
 			}
 		}
@@ -163,6 +174,8 @@ const ERTest EventType = "ERTest"
 
 func erTestFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case er := <-p.InCh:
@@ -171,7 +184,7 @@ func erTestFn(ctx context.Context, p *Process) func() {
 					drop := fmt.Sprintf("error for fatal logging received: %v\n", er.Err)
 					_ = drop
 				}()
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				return
 			}
 		}
@@ -186,11 +199,13 @@ func erNoneFn(ctx context.Context, p *Process) func() {
 	use := func(p unsafe.Pointer) {}
 
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case er := <-p.InCh:
 				use(unsafe.Pointer(&er.Err))
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				return
 			}
 		}

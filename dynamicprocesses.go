@@ -52,7 +52,7 @@ func (p *dynamicProcesses) Add(et EventType, proc *Process) {
 func (p *dynamicProcesses) Delete(et EventType) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.procMap[et].Cancel()
+	// p.procMap[et].Cancel()
 	delete(p.procMap, et)
 	log.Printf("deleted process %v\n", et)
 }
@@ -93,6 +93,8 @@ const EDRouter EventType = "EDRouter"
 // and route the event to the correct process.
 func edRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		eventNr := 0
 
 		for {
@@ -115,11 +117,16 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 				// and if it is not we retry.
 				// The checking is done in a go routine so the router don't block
 				// here waiting, and we continue with the next event in the queue.
-				if _, ok := p.DynamicProcesses.procMap[ev.EventType]; !ok {
+				p.DynamicProcesses.mu.Lock()
+				_, ok := p.DynamicProcesses.procMap[ev.EventType]
+				p.DynamicProcesses.mu.Unlock()
+				if !ok {
 					go func(ev Event) {
 						// Try to 3 times to deliver the message.
 						for i := 0; i < 3; i++ {
+							p.DynamicProcesses.mu.Lock()
 							_, ok := p.DynamicProcesses.procMap[ev.EventType]
+							p.DynamicProcesses.mu.Unlock()
 
 							if !ok {
 								p.AddEvent(Event{EventType: ERLog,
@@ -131,7 +138,9 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 
 							// Process is now registred, so we can safely put
 							//the event on the InCh of the process.
+							p.DynamicProcesses.mu.Lock()
 							p.DynamicProcesses.procMap[ev.EventType].InCh <- ev
+							p.DynamicProcesses.mu.Unlock()
 
 							return
 						}
@@ -145,9 +154,14 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 				}
 
 				// Process was registered. Deliver the event to the process InCh.
-				p.DynamicProcesses.procMap[ev.EventType].InCh <- ev
+				p.DynamicProcesses.mu.Lock()
+				inCh := p.DynamicProcesses.procMap[ev.EventType].InCh
+				p.DynamicProcesses.mu.Unlock()
 
-			case <-ctx.Done():
+				fmt.Printf("DEBUG: Routing event, %v, node: %v, eventType: %v, .Inch: %v\n", p.Event, p.Config.NodeName, ev.EventType, inCh)
+				inCh <- ev
+
+			case <-p.Ctx.Done():
 				p.AddEvent(Event{
 					EventType: ERLog,
 					EventKind: EventKindError,

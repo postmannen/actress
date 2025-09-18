@@ -2,7 +2,10 @@ package actress
 
 import (
 	"context"
+	"fmt"
 	"testing"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 func TestESProcesses(t *testing.T) {
@@ -10,8 +13,6 @@ func TestESProcesses(t *testing.T) {
 	defer cancel()
 
 	testCh := make(chan string)
-
-	t.Logf("--------------------------------------------------------\n")
 
 	cfg, _ := NewConfig()
 	rootp := NewRootProcess(ctx, nil, cfg, nil)
@@ -21,24 +22,79 @@ func TestESProcesses(t *testing.T) {
 	}
 
 	NewProcess(ctx, rootp, ETTest, EventKindStatic, etTestfn(testCh)).Act()
-	NewProcess(ctx, rootp, ESProcesses, EventKindSupervisor, esProcessesFn(rootp)).Act()
+	// NewProcess(ctx, rootp, ESProcesses, EventKindSupervisor, esProcessesFn()).Act()
 
-	testStr := "some supervisor data"
+	md := esProcessesMapDataIn{
+		EventType: "TestType1",
+		EventKind: "Kind1",
+	}
+
+	// ---------- Add item to the esprocesses map
+
+	b, err := cbor.Marshal(md)
+	if err != nil {
+		t.Fatalf("error: failed to marshal map data: %v", err)
+	}
 
 	rootp.AddEvent(Event{
-		EventType: ESProcesses,
-		EventKind: EventKindSupervisor,
-		// Instruction: InstructionGetAll,
-		Data:      []byte(testStr),
-		NextEvent: &Event{EventType: ETTest, EventKind: EventKindStatic},
+		EventType:   ESProcesses,
+		EventKind:   EventKindSupervisor,
+		Instruction: InstructionESProcessesAdd,
+		Data:        b,
+		NextEvent:   &Event{EventType: ETTest, EventKind: EventKindStatic},
 	})
 
+	// Wait for the the reply back, which are the ETTest .NextEvent
 	select {
-	case s := <-testCh:
-		if s != testStr {
-			t.Fatalf("string were not equal\n")
-		}
+	case <-testCh:
 	case <-ctx.Done():
+		return
+	}
+
+	// ---------- Get item to the esprocesses map
+
+	rootp.AddEvent(Event{
+		EventType:   ESProcesses,
+		EventKind:   EventKindSupervisor,
+		Instruction: InstructionESProcessesGetAll,
+		NextEvent:   &Event{EventType: ETTest, EventKind: EventKindStatic},
+	})
+
+	// Wait for the the reply back, which are the ETTest .NextEvent
+	select {
+	case ev := <-testCh:
+		pm := ESProcessesMap{}
+		err := cbor.Unmarshal([]byte(ev), &pm)
+		if err != nil {
+			t.Fatalf("error: failed to unmarshal process map: %v", err)
+		}
+
+		if pm["TestType1"] != "Kind1" {
+			t.Fatalf("The received map did not contain the expected value %+v\n", pm)
+		}
+
+		fmt.Printf("\n###########################################################################\n")
+		fmt.Printf("# Map contained: %v\n", pm)
+		fmt.Printf("###########################################################################\n")
+	case <-ctx.Done():
+		return
+	}
+
+	// ---------- Delete item from the esprocesses map
+
+	rootp.AddEvent(Event{
+		EventType:   ESProcesses,
+		EventKind:   EventKindSupervisor,
+		Instruction: InstructionESProcessesDelete,
+		Data:        b,
+		NextEvent:   &Event{EventType: ETTest, EventKind: EventKindStatic},
+	})
+
+	// Wait for the the reply back, which are the ETTest .NextEvent
+	select {
+	case <-testCh:
+	case <-ctx.Done():
+		return
 	}
 
 }

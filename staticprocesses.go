@@ -45,7 +45,7 @@ func newStaticProcesses() *staticProcesses {
 }
 
 // -----------------------------------------------------------------------------
-// Builtin standard EventType's and theit ETfunc's.
+// Builtin standard EventType's and their ETfunc's.
 // -----------------------------------------------------------------------------
 
 // ETRemote is an EventType that will be used if
@@ -68,6 +68,8 @@ const ETRouter EventType = "ETRouter"
 // and route the event to the correct process.
 func etRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		eventNr := 0
 
 		for {
@@ -93,12 +95,15 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 				}
 
 				// Process was registered. Deliver the event to the process InCh.
-				log.Printf(" -------- DEBUG1 %v ---------p.Processes.procMap[ev.EventType] : %v\n", p.Config.NodeName, p.StaticProcesses.procMap[ev.EventType])
-				log.Printf(" -------- DEBUG2 %v---------p ev.EventType : %v\n", p.Config.NodeName, ev.EventType)
-				log.Printf(" -------- DEBUG3 %v---------p.Processes.procMap[ev.EventType].InCh : %v\n", p.Config.NodeName, p.StaticProcesses.procMap[ev.EventType].InCh)
-				p.StaticProcesses.procMap[ev.EventType].InCh <- ev
+				// log.Printf(" -------- DEBUG1 %v ---------p.Processes.procMap[ev.EventType] : %v\n", p.Config.NodeName, p.StaticProcesses.procMap[ev.EventType])
+				// log.Printf(" -------- DEBUG2 %v---------p ev.EventType : %v\n", p.Config.NodeName, ev.EventType)
+				// log.Printf(" -------- DEBUG3 %v---------p.Processes.procMap[ev.EventType].InCh : %v\n", p.Config.NodeName, p.StaticProcesses.procMap[ev.EventType].InCh)
+				inCh := p.StaticProcesses.procMap[ev.EventType].InCh
 
-			case <-ctx.Done():
+				fmt.Printf("DEBUG: Routing event, %v, node: %v, eventType: %v, .Inch: %v\n", p.Event, p.Config.NodeName, ev.EventType, inCh)
+				inCh <- ev
+
+			case <-p.Ctx.Done():
 				p.AddEvent(Event{
 					EventType: ERLog,
 					EventKind: EventKindError,
@@ -160,11 +165,13 @@ const ETTest EventType = "ETTest"
 func etTestfn(testCh chan string) ETFunc {
 	etFunc := func(ctx context.Context, p *Process) func() {
 		fn := func() {
+			defer p.Stop()
+
 			for {
 				select {
 				case result := <-p.InCh:
 					testCh <- string(result.Data)
-				case <-ctx.Done():
+				case <-p.Ctx.Done():
 					return
 				}
 			}
@@ -184,12 +191,14 @@ const ETTestCh EventType = "ETTestCh"
 // of the process.
 func etTestChFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case e := <-p.InCh:
 				p.TestCh <- e
 
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				p.AddEvent(Event{
 					EventType: ERLog,
 					EventKind: EventKindError,
@@ -211,6 +220,8 @@ const ETPidGetAll EventType = "ETPidGetAll"
 // Get all the pids and processes, encode it into json.
 func etPidGetAllFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case e := <-p.InCh:
@@ -224,7 +235,7 @@ func etPidGetAllFn(ctx context.Context, p *Process) func() {
 				}
 				p.AddEvent(Event{EventType: e.NextEvent.EventType, EventKind: e.NextEvent.EventKind, Data: b})
 
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				p.AddEvent(Event{
 					EventType: ERLog,
 					EventKind: EventKindError,
@@ -279,7 +290,7 @@ func etProfilingFn(ctx context.Context, p *Process) func() {
 			reg.MustRegister(procTotal)
 
 			http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-			//<-ctx.Done()
+			//<-p.Ctx.Done()
 		}
 	}
 
@@ -315,6 +326,8 @@ const ETPrint EventType = "ETPrint"
 // Print the content of the .Data field of the event to stdout.
 func etPrintFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case d := <-p.InCh:
@@ -322,7 +335,7 @@ func etPrintFn(ctx context.Context, p *Process) func() {
 				go func() {
 					fmt.Printf("%v\n", string(d.Data))
 				}()
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				return
 			}
 		}
@@ -337,6 +350,8 @@ const ETExit EventType = "ETExit"
 // Will exit and kill all processes.
 func etExitFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case d := <-p.InCh:
@@ -345,7 +360,7 @@ func etExitFn(ctx context.Context, p *Process) func() {
 					fmt.Printf("info: got event ETExit: %v\n", string(d.Data))
 					os.Exit(0)
 				}()
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				return
 			}
 		}
@@ -369,6 +384,8 @@ const pidGetAll pidAction = "pidGetAll"
 // []string{"action","pid","process name"}
 func etPidFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case ev := <-p.InCh:
@@ -396,7 +413,7 @@ func etPidFn(ctx context.Context, p *Process) func() {
 					}
 				}
 
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				return
 			}
 		}
@@ -413,6 +430,8 @@ const ETWatchEventFile EventType = "ETWatchEventFile"
 func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 	fønk := func(ctx context.Context, p *Process) func() {
 		fn := func() {
+			defer p.Stop()
+
 			// Create new watcher.
 			watcher, err := fsnotify.NewWatcher()
 			if err != nil {
@@ -478,7 +497,7 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 							return
 						}
 						log.Println("error:", err)
-					case <-ctx.Done():
+					case <-p.Ctx.Done():
 						return
 					}
 				}
@@ -494,7 +513,7 @@ func wrapperETWatchEventFileFn(path string, extension string) ETFunc {
 				select {
 				case <-p.InCh:
 
-				case <-ctx.Done():
+				case <-p.Ctx.Done():
 					return
 				}
 			}
@@ -511,6 +530,8 @@ const ETReadFile EventType = "ETReadFile"
 
 func ETReadFileFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case ev := <-p.InCh:
@@ -531,7 +552,7 @@ func ETReadFileFn(ctx context.Context, p *Process) func() {
 					nEv.Data = b
 					p.AddEvent(*nEv)
 				}()
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				return
 			}
 		}
@@ -580,6 +601,8 @@ const ETProcessFromData EventType = "ETProcessFromData"
 
 func etProcessFromDataFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		defer p.Stop()
+
 		for {
 			select {
 			case ev := <-p.InCh:
@@ -595,7 +618,7 @@ func etProcessFromDataFn(ctx context.Context, p *Process) func() {
 					// DEBUG: Injecting an event for testing while developing.
 					// p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
 				}()
-			case <-ctx.Done():
+			case <-p.Ctx.Done():
 				return
 			}
 		}
@@ -613,7 +636,7 @@ func ecCustomCmdFn(command []string) func(ctx context.Context, p *Process) func(
 				ev := <-p.InCh
 
 				go func(ev Event) {
-					fmt.Printf("********* start of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
+					fmt.Printf("DEBUG: ecCustomCmdFn, start of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
 					//ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(5))
 					ctx, cancel := context.WithCancel(ctx)
 					defer cancel()
@@ -663,7 +686,7 @@ func ecCustomCmdFn(command []string) func(ctx context.Context, p *Process) func(
 						}
 					}()
 
-					//<-ctx.Done()
+					//<-p.Ctx.Done()
 
 					err = cmd.Wait()
 					if err != nil {
@@ -673,7 +696,7 @@ func ecCustomCmdFn(command []string) func(ctx context.Context, p *Process) func(
 					}
 
 					//p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
-					fmt.Printf("********* End of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
+					fmt.Printf("DEBUG: ecCustomCmdFn, End of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
 
 				}(ev)
 			}
@@ -698,7 +721,7 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 			ev := <-p.InCh
 
 			go func(ev Event) {
-				fmt.Printf("********* start of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
+				fmt.Printf("DEBUG: etOsCmdFn, start of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
 				//ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(5))
 				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
@@ -748,7 +771,7 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 					}
 				}()
 
-				//<-ctx.Done()
+				//<-p.Ctx.Done()
 
 				err = cmd.Wait()
 				if err != nil {
@@ -758,7 +781,7 @@ func etOsCmdFn(ctx context.Context, p *Process) func() {
 				}
 
 				//p.AddEvent(Event{EventType: ETPrint, Data: outText.Bytes()})
-				fmt.Printf("********* End of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
+				fmt.Printf("DEBUG: etOsCmdFn, End of event: %v, cmd: %v\n", ev.EventType, ev.Cmd)
 
 			}(ev)
 		}

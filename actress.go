@@ -20,59 +20,72 @@ import (
 	"fmt"
 	"log"
 	"sync"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 // Add a new Event and it's process to the processes map.
-func (p *Process) addToProcessesMap(et EventType, proc *Process, eventKind EventKind) {
-	// Check if a process for the same event is defined, and if so we
-	// cancel the current process before we replace it with a new one.
-	switch eventKind {
+// Check if a process for the same event is defined, if so we
+// cancel the current process before we replace it with a new one.
+func (p *Process) addToProcessesMap() {
+	switch p.Kind {
 	case EventKindStatic:
-		if _, ok := p.StaticProcesses.procMap[et]; ok {
-			p.StaticProcesses.procMap[et].Cancel()
+		if _, ok := p.StaticProcesses.procMap[p.Event]; ok {
+			p.StaticProcesses.procMap[p.Event].Cancel()
 		}
-		p.StaticProcesses.procMap[et] = proc
+		p.StaticProcesses.procMap[p.Event] = p
 	case EventKindDynamic:
-
 		p.DynamicProcesses.mu.Lock()
 		defer p.DynamicProcesses.mu.Unlock()
-		if _, ok := p.DynamicProcesses.procMap[et]; ok {
-			p.DynamicProcesses.procMap[et].Cancel()
+		if _, ok := p.DynamicProcesses.procMap[p.Event]; ok {
+			p.DynamicProcesses.procMap[p.Event].Cancel()
 		}
-		p.DynamicProcesses.procMap[et] = proc
+		p.DynamicProcesses.procMap[p.Event] = p
 	case EventKindCustom:
-
 		p.CustomProcesses.mu.Lock()
 		defer p.CustomProcesses.mu.Unlock()
-		if _, ok := p.CustomProcesses.procMap[et]; ok {
-			p.CustomProcesses.procMap[et].Cancel()
+		if _, ok := p.CustomProcesses.procMap[p.Event]; ok {
+			p.CustomProcesses.procMap[p.Event].Cancel()
 		}
-		p.CustomProcesses.procMap[et] = proc
+		p.CustomProcesses.procMap[p.Event] = p
 	case EventKindError:
-		// Check if a process for the same event is defined, and if so we
-		// cancel the current process before we replace it with a new one.
-		if _, ok := p.ErrorProcesses.procMap[et]; ok {
-			p.ErrorProcesses.procMap[et].Cancel()
+		if _, ok := p.ErrorProcesses.procMap[p.Event]; ok {
+			p.ErrorProcesses.procMap[p.Event].Cancel()
 		}
-		p.ErrorProcesses.procMap[et] = proc
+		p.ErrorProcesses.procMap[p.Event] = p
 	case EventKindSupervisor:
-		// Check if a process for the same event is defined, and if so we
-		// cancel the current process before we replace it with a new one.
-		if _, ok := p.supervisorProcesses.procMap[et]; ok {
-			p.supervisorProcesses.procMap[et].Cancel()
+		p.supervisorProcesses.mu.Lock()
+		defer p.supervisorProcesses.mu.Unlock()
+		if _, ok := p.supervisorProcesses.procMap[p.Event]; ok {
+			p.supervisorProcesses.procMap[p.Event].Cancel()
 		}
-		p.supervisorProcesses.procMap[et] = proc
+		p.supervisorProcesses.procMap[p.Event] = p
 
 	}
 }
 
-// // Delete an Event and it's process from the processes map.
-// func (p *processes) delete(et EventType, proc *Process) {
-// 	p.mu.Lock()
-// 	defer p.mu.Unlock()
-// 	p.procMap[et].cancel()
-// 	delete(p.procMap, et)
-// }
+// Add a new Event and it's process to the processes map.
+func (p *Process) deleteFromProcessesMap() {
+	// Check if a process for the same event is defined, and if so we
+	// cancel the current process before we replace it with a new one.
+	switch p.Kind {
+	case EventKindStatic:
+		p.AddEvent(Event{EventType: ERLog, EventKind: EventKindError, Err: fmt.Errorf("not allowed to delete static process")})
+	case EventKindDynamic:
+		p.DynamicProcesses.mu.Lock()
+		delete(p.DynamicProcesses.procMap, p.Event)
+		p.DynamicProcesses.mu.Unlock()
+	case EventKindCustom:
+		p.CustomProcesses.mu.Lock()
+		delete(p.CustomProcesses.procMap, p.Event)
+		p.CustomProcesses.mu.Unlock()
+	case EventKindError:
+		p.AddEvent(Event{EventType: ERLog, EventKind: EventKindError, Err: fmt.Errorf("not allowed to delete error process")})
+	case EventKindSupervisor:
+		p.AddEvent(Event{EventType: ERLog, EventKind: EventKindError, Err: fmt.Errorf("not allowed to delete supervisor process")})
+
+	}
+}
 
 type pidnr int
 type PidVsProcMap map[pidnr]*Process
@@ -90,16 +103,23 @@ func (p *pidToProc) add(pid pidnr, proc *Process) {
 	p.mp[pid] = proc
 }
 
-// Get the *Process based on the pid.
-func (p *pidToProc) getProc(pid pidnr) *Process {
+// Delete a pid and process from the map.
+func (p *pidToProc) remove(pid pidnr) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	proc, ok := p.mp[pid]
-	if !ok {
-		return nil
-	}
-	return proc
+	delete(p.mp, pid)
 }
+
+// // Get the *Process based on the pid.
+// func (p *pidToProc) getProc(pid pidnr) *Process {
+// 	p.mu.Lock()
+// 	defer p.mu.Unlock()
+// 	proc, ok := p.mp[pid]
+// 	if !ok {
+// 		return nil
+// 	}
+// 	return proc
+// }
 
 // Return a copy of the pid vs *Processes map.
 func (p *pidToProc) copyOfMap() *PidVsProcMap {
@@ -169,6 +189,9 @@ type Process struct {
 	// The event kind of the process
 	Kind EventKind
 	// Maps for various staticProcess information.
+	// NB: Added a Mutex on this structure, though it should really not be needed,
+	//	since there is only reads from the static procMap. Decide later if we should
+	//	remove it again.
 	StaticProcesses *staticProcesses
 	// Map of dynamic processes
 	DynamicProcesses *dynamicProcesses
@@ -186,7 +209,9 @@ type Process struct {
 	pids *pids
 	// PID of the process
 	PID pidnr
-	// Cancel func
+	// The context of the process
+	Ctx context.Context `json:"-"`
+	// Cancel func for context of the process
 	Cancel context.CancelFunc `json:"-"`
 }
 
@@ -220,6 +245,7 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config, etRemoteFunc E
 		isRoot:              true,
 		Config:              conf,
 		pids:                newPids(),
+		Ctx:                 ctx,
 		Cancel:              cancel,
 	}
 
@@ -229,42 +255,53 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config, etRemoteFunc E
 		p.fn = fn(ctx, &p)
 	}
 
-	// Register and start all the standard child processes
-	// that should spawn off the root process
+	// Register and start all the standard child processes of root.
+	//
+	// When starting Root, all the needed processes to handle the system are not
+	// yet started. For example both the ESRouter and the ESProcesses, and the
+	// Error processes are needed to be able to register processes in the
+	// ESProcesses process.
+	// To be able to register the processes with the esProcesses actor we store
+	// the information about each process started in a slice, so when all
+	// processes are started we can go through each element of the slice and
+	// use the information to register all the processes in ESProcesses.
+	pi := newRegisterProcessInfo()
 
 	// Starting error handling processes.
-	NewProcess(ctx, &p, ERLog, EventKindError, erLogFn).Act()
-	NewProcess(ctx, &p, ERDebug, EventKindError, erDebugFn).Act()
-	NewProcess(ctx, &p, ERFatal, EventKindError, erFatalFn).Act()
-	NewProcess(ctx, &p, ERTest, EventKindError, erTestFn).Act()
-	NewProcess(ctx, &p, ERNone, EventKindError, erNoneFn).Act()
-	NewProcess(ctx, &p, ETPrint, EventKindStatic, etPrintFn).Act()
+	NewProcess(ctx, &p, ERLog, EventKindError, erLogFn).actForRoot(pi)
+	NewProcess(ctx, &p, ERDebug, EventKindError, erDebugFn).actForRoot(pi)
+	NewProcess(ctx, &p, ERFatal, EventKindError, erFatalFn).actForRoot(pi)
+	NewProcess(ctx, &p, ERTest, EventKindError, erTestFn).actForRoot(pi)
+	NewProcess(ctx, &p, ERNone, EventKindError, erNoneFn).actForRoot(pi)
+	NewProcess(ctx, &p, ETPrint, EventKindStatic, etPrintFn).actForRoot(pi)
 
-	NewProcess(ctx, &p, ETRouter, EventKindStatic, etRouterFn).Act()
-	NewProcess(ctx, &p, ERRouter, EventKindError, erRouterFn).Act()
-	NewProcess(ctx, &p, EDRouter, EventKindDynamic, edRouterFn).Act()
-	NewProcess(ctx, &p, ECRouter, EventKindCustom, ecRouterFn).Act()
-	NewProcess(ctx, &p, ESRouter, EventKindSupervisor, esRouterFn).Act()
+	NewProcess(ctx, &p, ETRouter, EventKindStatic, etRouterFn).actForRoot(pi)
+	NewProcess(ctx, &p, ERRouter, EventKindError, erRouterFn).actForRoot(pi)
+	NewProcess(ctx, &p, EDRouter, EventKindDynamic, edRouterFn).actForRoot(pi)
+	NewProcess(ctx, &p, ECRouter, EventKindCustom, ecRouterFn).actForRoot(pi)
+	NewProcess(ctx, &p, ESRouter, EventKindSupervisor, esRouterFn).actForRoot(pi)
 
-	NewProcess(ctx, &p, ETProfiling, EventKindStatic, etProfilingFn).Act()
+	NewProcess(ctx, &p, ESProcesses, EventKindSupervisor, esProcessesFn()).actForRoot(pi)
+
+	NewProcess(ctx, &p, ETProfiling, EventKindStatic, etProfilingFn).actForRoot(pi)
 
 	if p.Config.CustomEvents {
-		NewProcess(ctx, &p, ETProcessFromData, EventKindStatic, etProcessFromDataFn).Act()
-		NewProcess(ctx, &p, ETWatchEventFile, EventKindStatic, wrapperETWatchEventFileFn(p.Config.CustomEventsPath, ".json")).Act()
+		NewProcess(ctx, &p, ETProcessFromData, EventKindStatic, etProcessFromDataFn).actForRoot(pi)
+		NewProcess(ctx, &p, ETWatchEventFile, EventKindStatic, wrapperETWatchEventFileFn(p.Config.CustomEventsPath, ".json")).actForRoot(pi)
 	}
 
 	// Starting the remainding processes.
-	NewProcess(ctx, &p, ETOsSignal, EventKindStatic, etOsSignalFn).Act()
-	NewProcess(ctx, &p, ETTestCh, EventKindStatic, etTestChFn).Act()
-	NewProcess(ctx, &p, ETPid, EventKindStatic, etPidFn).Act()
-	NewProcess(ctx, &p, ETReadFile, EventKindStatic, ETReadFileFn).Act()
-	NewProcess(ctx, &p, ETOsCmd, EventKindStatic, etOsCmdFn).Act()
+	NewProcess(ctx, &p, ETOsSignal, EventKindStatic, etOsSignalFn).actForRoot(pi)
+	NewProcess(ctx, &p, ETTestCh, EventKindStatic, etTestChFn).actForRoot(pi)
+	NewProcess(ctx, &p, ETPid, EventKindStatic, etPidFn).actForRoot(pi)
+	NewProcess(ctx, &p, ETReadFile, EventKindStatic, ETReadFileFn).actForRoot(pi)
+	NewProcess(ctx, &p, ETOsCmd, EventKindStatic, etOsCmdFn).actForRoot(pi)
 
-	NewProcess(ctx, &p, ETDone, EventKindStatic, etDoneFn).Act()
-	NewProcess(ctx, &p, ETExit, EventKindStatic, etExitFn).Act()
-	NewProcess(ctx, &p, ETPidGetAll, EventKindStatic, etPidGetAllFn).Act()
+	NewProcess(ctx, &p, ETDone, EventKindStatic, etDoneFn).actForRoot(pi)
+	NewProcess(ctx, &p, ETExit, EventKindStatic, etExitFn).actForRoot(pi)
+	NewProcess(ctx, &p, ETPidGetAll, EventKindStatic, etPidGetAllFn).actForRoot(pi)
 
-	NewProcess(ctx, &p, EDRouter, EventKindDynamic, edRouterFn).Act()
+	NewProcess(ctx, &p, EDRouter, EventKindDynamic, edRouterFn).actForRoot(pi)
 
 	// If there are no ETRemote function given as an argument, we just add
 	// a function to be used for creating a dummy ETRemote process. It clears
@@ -281,20 +318,44 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config, etRemoteFunc E
 						// and add the original event again.
 						ev.NextEvent.DstNode = ""
 						p.AddEvent(*ev.NextEvent)
-					case <-ctx.Done():
+					case <-p.Ctx.Done():
 						return
 					}
 				}
 			}
 			return fn2
 		}
-		NewProcess(ctx, &p, ETRemote, EventKindStatic, fn).Act()
+		NewProcess(ctx, &p, ETRemote, EventKindStatic, fn).actForRoot(pi)
 
 	} else {
-		NewProcess(ctx, &p, ETRemote, EventKindStatic, etRemoteFunc).Act()
+		NewProcess(ctx, &p, ETRemote, EventKindStatic, etRemoteFunc).actForRoot(pi)
+	}
+
+	// Register all the processes in ESProcesses.
+	for _, md := range *pi {
+
+		b, err := cbor.Marshal(md)
+		if err != nil {
+			log.Fatalf("error: NewRootProcess: failed to marshal map data: %v", err)
+		}
+
+		p.AddEvent(Event{
+			EventType:   ESProcesses,
+			EventKind:   EventKindSupervisor,
+			Instruction: InstructionESProcessesAdd,
+			Data:        b,
+			// NextEvent:   &Event{EventType: ETTest, EventKind: EventKindStatic},
+		})
 	}
 
 	return &p
+}
+
+type registerProcessInfo []esProcessesMapDataIn
+
+func newRegisterProcessInfo() *registerProcessInfo {
+	pi := registerProcessInfo{}
+	return &pi
 }
 
 // NewProcess will prepare and return a *Process. It will copy
@@ -321,10 +382,9 @@ func NewProcess(ctx context.Context, parentP *Process, event EventType, kind Eve
 		Config:              parentP.Config,
 		pids:                parentP.pids,
 		PID:                 parentP.pids.next(),
+		Ctx:                 ctx,
 		Cancel:              cancel,
 	}
-
-	p.addToProcessesMap(event, &p, kind)
 
 	if fn != nil {
 		p.fn = fn(ctx, &p)
@@ -345,7 +405,7 @@ func (p *Process) AddEvent(event Event) {
 	// If the Event is to be sent to a remote node we wrap it in an
 	// ETRemote event, and forward it to the ETRemote actor here.
 	if event.DstNode != p.Config.NodeName && event.DstNode != "" {
-		log.Printf("******DEBUG******: event.DstNode: %v, p.NodeName: %v\n", event.DstNode, p.Config.NodeName)
+		log.Printf("DEBUG: AddEvent, event.DstNode: %v, p.NodeName: %v\n", event.DstNode, p.Config.NodeName)
 
 		remoteEv := Event{
 			EventType: ETRemote,
@@ -406,14 +466,48 @@ func (p *Process) addEventError(event Event) {
 // and we can communicate with it via it's channels.
 func (p *Process) Act() error {
 	log.Printf("on node %v: Starting %v actor for EventType: %v\n", p.Config.NodeName, p.Kind, p.Event)
-	if p.fn == nil {
-		//go p.fn()
-		return nil
-	}
 
 	p.pids.toProc.add(p.PID, p)
 
-	go p.fn()
+	p.addToProcessesMap()
+
+	if p.fn != nil {
+		go p.fn()
+	}
+
+	return nil
+}
+
+func (p *Process) actForRoot(pi *registerProcessInfo) error {
+
+	log.Printf("on node %v: ROOT ACTOR: Starting %v actor for EventType: %v\n", p.Config.NodeName, p.Kind, p.Event)
+
+	p.pids.toProc.add(p.PID, p)
+
+	p.addToProcessesMap()
+
+	if p.fn != nil {
+		go p.fn()
+	}
+
+	toRegister := esProcessesMapDataIn{
+		EventType: p.Event,
+		EventKind: p.Kind,
+	}
+
+	*pi = append(*pi, toRegister)
+
+	return nil
+
+}
+
+// Will Cancel the context attached to the process.
+// Will delete the process from the processes map.
+// Will delete the pid from the pids map.
+func (p *Process) Stop() error {
+	p.Cancel()
+	p.deleteFromProcessesMap()
+	p.pids.toProc.remove(p.PID)
 
 	return nil
 }
