@@ -22,35 +22,37 @@ import (
 	"strconv"
 )
 
+// Config holds all the configuration settings for the actress system.
 type Config struct {
-	Profiling        string
 	CustomEvents     bool
 	Metrics          bool
 	CustomEventsPath string
 	NodeName         Node
+	LogLevel         string
 }
 
 // New config prepare a *Config, and a *flag.FlagSet, and return the
 // resulting actress *Config and *flag.FlagSet.
 // The flags are checked for env variables, and if not found, the default value is used.
 // The flagset needs to be parsed for the flags to be set.
-func NewConfig() (*Config, *flag.FlagSet) {
+//
+// The logLevel is the default log level for the system, and can be provided as an input argument.
+func NewConfig(logLevel string) (*Config, *flag.FlagSet) {
 	// The config with default values set.
 	c := Config{
-		Profiling:        "none",
 		CustomEvents:     false,
 		Metrics:          false,
 		CustomEventsPath: "customevents",
 		NodeName:         "replaceme",
+		LogLevel:         logLevel,
 	}
 
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
-	fs.StringVar(&c.Profiling, "profiling", CheckEnv("PROFILING", c.Profiling).(string), "profiling (env PROFILING)")
 	fs.BoolVar(&c.CustomEvents, "customEvents", CheckEnv("CUSTOMEVENTS", c.CustomEvents).(bool), "custom events (env CUSTOMEVENTS)")
 	fs.BoolVar(&c.Metrics, "metrics", CheckEnv("METRICS", c.Metrics).(bool), "metrics (env METRICS)")
 	fs.StringVar(&c.CustomEventsPath, "customEventsPath", CheckEnv("CUSTOMEVENTSPATH", c.CustomEventsPath).(string), "custom events path (env CUSTOMEVENTSPATH)")
 	fs.StringVar((*string)(&c.NodeName), "nodeName", CheckEnv("NODENAME", string(c.NodeName)).(string), "nodename (env NODENAME)")
-
+	fs.StringVar(&c.LogLevel, "logLevel", CheckEnv("LOGLEVEL", c.LogLevel).(string), "log level (env LOGLEVEL), allowed values are: debug, info, error, fatal, none")
 	return &c, fs
 }
 

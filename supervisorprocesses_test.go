@@ -14,19 +14,19 @@ func TestESProcesses(t *testing.T) {
 
 	testCh := make(chan string)
 
-	cfg, _ := NewConfig()
+	cfg, _ := NewConfig("debug")
 	rootp := NewRootProcess(ctx, nil, cfg, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	NewProcess(ctx, rootp, ETTest, EventKindStatic, etTestfn(testCh)).Act()
-	// NewProcess(ctx, rootp, ESProcesses, EventKindSupervisor, esProcessesFn()).Act()
+	NewProcess(ctx, rootp, ETTest, KindStatic, etTestfn(testCh)).Act()
+	// NewProcess(ctx, rootp, ESProcesses, KindSupervisor, esProcessesFn()).Act()
 
 	md := esProcessesMapDataIn{
-		EventType: "TestType1",
-		EventKind: "Kind1",
+		Name: "TestType1",
+		Kind: "Kind1",
 	}
 
 	// ---------- Add item to the esprocesses map
@@ -37,11 +37,11 @@ func TestESProcesses(t *testing.T) {
 	}
 
 	rootp.AddEvent(Event{
-		EventType:   ESProcesses,
-		EventKind:   EventKindSupervisor,
+		Name:        ESProcesses,
+		Kind:        KindSupervisor,
 		Instruction: InstructionESProcessesAdd,
 		Data:        b,
-		NextEvent:   &Event{EventType: ETTest, EventKind: EventKindStatic},
+		NextEvent:   &Event{Name: ETTest, Kind: KindStatic},
 	})
 
 	// Wait for the the reply back, which are the ETTest .NextEvent
@@ -54,10 +54,10 @@ func TestESProcesses(t *testing.T) {
 	// ---------- Get item to the esprocesses map
 
 	rootp.AddEvent(Event{
-		EventType:   ESProcesses,
-		EventKind:   EventKindSupervisor,
+		Name:        ESProcesses,
+		Kind:        KindSupervisor,
 		Instruction: InstructionESProcessesGetAll,
-		NextEvent:   &Event{EventType: ETTest, EventKind: EventKindStatic},
+		NextEvent:   &Event{Name: ETTest, Kind: KindStatic},
 	})
 
 	// Wait for the the reply back, which are the ETTest .NextEvent
@@ -83,11 +83,11 @@ func TestESProcesses(t *testing.T) {
 	// ---------- Delete item from the esprocesses map
 
 	rootp.AddEvent(Event{
-		EventType:   ESProcesses,
-		EventKind:   EventKindSupervisor,
+		Name:        ESProcesses,
+		Kind:        KindSupervisor,
 		Instruction: InstructionESProcessesDelete,
 		Data:        b,
-		NextEvent:   &Event{EventType: ETTest, EventKind: EventKindStatic},
+		NextEvent:   &Event{Name: ETTest, Kind: KindStatic},
 	})
 
 	// Wait for the the reply back, which are the ETTest .NextEvent
