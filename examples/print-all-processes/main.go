@@ -29,7 +29,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	cfg, _ := actress.NewConfig()
+	cfg, _ := actress.NewConfig("debug")
 	rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
 	rootAct.Act()
 
@@ -39,11 +39,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	rootAct.AddEvent(actress.Event{EventType: actress.ETPidGetAll,
-		EventKind: actress.EventKindStatic,
+	rootAct.AddEvent(actress.Event{Name: actress.ETPidGetAll,
+		Kind: actress.KindStatic,
 		NextEvent: &actress.Event{
-			EventType: actress.ETTestCh,
-			EventKind: actress.EventKindStatic},
+			Name: actress.ETTestCh,
+			Kind: actress.KindStatic},
 	},
 	)
 

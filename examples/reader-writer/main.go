@@ -26,15 +26,15 @@ import (
 	"github.com/postmannen/actress"
 )
 
-const ETEventProcessor actress.EventType = "ETEventProcessor"
-const ETEventCreator actress.EventType = "ETEventCreator"
+const ETEventProcessor actress.EventName = "ETEventProcessor"
+const ETEventCreator actress.EventName = "ETEventCreator"
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Create a new root process.
-	cfg, _ := actress.NewConfig()
+	cfg, _ := actress.NewConfig("debug")
 	rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
 
 	// etHttpGetFn will reveive the event, do some processing with it.
@@ -96,10 +96,10 @@ func main() {
 				// Create a an Event with just EventType set, and the NextEvent
 				// set so the reply event will be sent back to us. The Data field
 				// will be set and handled by the Write method when called.
-				erw := NewEventRW(p, &actress.Event{EventType: ETEventProcessor,
-					EventKind: actress.EventKindStatic,
-					NextEvent: &actress.Event{EventType: ETEventCreator,
-						EventKind: actress.EventKindStatic}})
+				erw := NewEventRW(p, &actress.Event{Name: ETEventProcessor,
+					Kind: actress.KindStatic,
+					NextEvent: &actress.Event{Name: ETEventCreator,
+						Kind: actress.KindStatic}})
 
 				buf := bytes.NewBuffer([]byte{})
 				str := fmt.Sprintf("some data for event nr: %v", counter)
@@ -131,8 +131,8 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, rootAct, ETEventProcessor, actress.EventKindStatic, etEventProcessorFn).Act()
-	actress.NewProcess(ctx, rootAct, ETEventCreator, actress.EventKindStatic, etEventCreatorFn).Act()
+	actress.NewProcess(ctx, rootAct, ETEventProcessor, actress.KindStatic, etEventProcessorFn).Act()
+	actress.NewProcess(ctx, rootAct, ETEventCreator, actress.KindStatic, etEventCreatorFn).Act()
 
 	<-ctx.Done()
 }

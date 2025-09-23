@@ -2,7 +2,7 @@
 
 A Concurrent Actor framework written in Go.
 
-**NB: This is still in the idea phase, so concepts are being tested out and things might/will change rapidly. 
+**NB: This is still in the idea phase, so concepts are being tested out and things might/will change rapidly.
 <u>Expect breaking changes between commits</u>**.
 
 ## Overview

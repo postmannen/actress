@@ -26,8 +26,8 @@ import (
 )
 
 // Subject is put in Event.cmd[0], and the payload is in Event.Data
-const ETNatsPub ac.EventType = "ETNatsPub"
-const ETNatsSub ac.EventType = "ETNatsSub"
+const ETNatsPub ac.EventName = "ETNatsPub"
+const ETNatsSub ac.EventName = "ETNatsSub"
 const NatsSubject string = "mysubject"
 
 // Wrapper function that will return an ETFunc as the end result that will start nats subscriber.
@@ -41,16 +41,17 @@ func wrapperETNatsSubscriber(conn *nats.Conn) ac.ETFunc {
 			go func() {
 				sub, err := conn.QueueSubscribe(NatsSubject, NatsSubject, func(msg *nats.Msg) {
 					p.AddEvent(ac.Event{
-						EventType: ac.ETPrint,
-						EventKind: ac.EventKindStatic,
-						Data:      []byte(fmt.Sprintf("* nats: got message on subject %v, payload: %v", msg.Subject, string(msg.Data))),
+						Name: ac.ETPrint,
+						Kind: ac.KindStatic,
+						Data: []byte(fmt.Sprintf("* nats: got message on subject %v, payload: %v", msg.Subject, string(msg.Data))),
 					})
 				})
 				if err != nil {
 					p.AddEvent(ac.Event{
-						EventType: ac.ERFatal,
-						EventKind: ac.EventKindError,
-						Err:       fmt.Errorf("error: failed to nats.QueueSubscribe: %v", err)})
+						Name:        ac.ERLog,
+						Kind:        ac.KindError,
+						Instruction: ac.InstructionFatal,
+						Err:         fmt.Errorf("error: failed to nats.QueueSubscribe: %v", err)})
 				}
 				defer sub.Unsubscribe()
 				<-ctx.Done()
@@ -78,9 +79,10 @@ func wrapperETNatsPublisher(conn *nats.Conn) ac.ETFunc {
 						//fmt.Printf("********* GOT EVENT: %v\n", ev)
 						err := conn.Publish(ev.Cmd[0], ev.Data)
 						if err != nil {
-							p.AddEvent(ac.Event{EventType: ac.ERFatal,
-								EventKind: ac.EventKindError,
-								Err:       fmt.Errorf("error: failed to nats.Publish: %v", err)})
+							p.AddEvent(ac.Event{Name: ac.ERLog,
+								Kind:        ac.KindError,
+								Instruction: ac.InstructionFatal,
+								Err:         fmt.Errorf("error: failed to nats.Publish: %v", err)})
 						}
 					}()
 				case <-ctx.Done():
@@ -100,7 +102,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	cfg, _ := ac.NewConfig()
+	cfg, _ := ac.NewConfig("debug")
 	rootAct := ac.NewRootProcess(ctx, nil, cfg, nil)
 	err := rootAct.Act()
 	if err != nil {
@@ -109,10 +111,10 @@ func main() {
 
 	// Start up a Nats-server using the ETOsCmd EventType.
 	rootAct.AddEvent(ac.Event{
-		EventType: ac.ETOsCmd,
-		EventKind: ac.EventKindStatic,
+		Name:      ac.ETOsCmd,
+		Kind:      ac.KindStatic,
 		Cmd:       []string{"/bin/bash", "-c", "docker run --rm -p 4222:4222 -i nats:latest"},
-		NextEvent: &ac.Event{EventType: ac.ETPrint}})
+		NextEvent: &ac.Event{Name: ac.ETPrint}})
 
 	// Wait a second so the nats-server is started before we connect the client.
 	time.Sleep(time.Second * 2)
@@ -130,12 +132,12 @@ func main() {
 	defer conn.Close()
 
 	// Create a nats sub process.
-	err = ac.NewProcess(ctx, rootAct, ETNatsSub, ac.EventKindStatic, wrapperETNatsSubscriber(conn)).Act()
+	err = ac.NewProcess(ctx, rootAct, ETNatsSub, ac.KindStatic, wrapperETNatsSubscriber(conn)).Act()
 	if err != nil {
 		log.Fatal(err)
 	}
 	// Create a nats pub process.
-	err = ac.NewProcess(ctx, rootAct, ETNatsPub, ac.EventKindStatic, wrapperETNatsPublisher(conn)).Act()
+	err = ac.NewProcess(ctx, rootAct, ETNatsPub, ac.KindStatic, wrapperETNatsPublisher(conn)).Act()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -145,10 +147,10 @@ func main() {
 	for {
 		time.Sleep(time.Second * 2)
 		rootAct.AddEvent(ac.Event{
-			EventType: ETNatsPub,
-			EventKind: ac.EventKindStatic,
-			Cmd:       []string{NatsSubject},
-			Data:      []byte(fmt.Sprintf("some data that was put in here: %v", nr)),
+			Name: ETNatsPub,
+			Kind: ac.KindStatic,
+			Cmd:  []string{NatsSubject},
+			Data: []byte(fmt.Sprintf("some data that was put in here: %v", nr)),
 		})
 		nr++
 	}

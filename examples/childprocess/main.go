@@ -15,15 +15,15 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	cfg, _ := actress.NewConfig()
+	cfg, _ := actress.NewConfig("debug")
 	rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
 	rootAct.Act()
 
 	// Create a test channel where we receive the end result.
 	testCh := make(chan string)
 
-	const ETTest1 actress.EventType = "ETTest1"
-	const ETTest2 actress.EventType = "ETTest2"
+	const ETTest1 actress.EventName = "ETTest1"
+	const ETTest2 actress.EventName = "ETTest2"
 
 	// Define the function that will be attached to the ETTest1 EventType.
 	test1Func := func(ctx context.Context, p *actress.Process) func() {
@@ -42,7 +42,10 @@ func main() {
 									testCh <- string(dots)
 
 									// Also create an informational error message.
-									p.ErrorEventCh <- actress.Event{EventType: actress.ERDebug, Err: fmt.Errorf("info: done with the acting")}
+									p.ErrorEventCh <- actress.Event{Name: actress.ERLog,
+										Kind:        actress.KindError,
+										Instruction: actress.InstructionDebug,
+										Err:         fmt.Errorf("info: done with the acting")}
 
 								case <-ctx.Done():
 									return
@@ -52,10 +55,10 @@ func main() {
 
 						return fn
 					}
-					actress.NewProcess(ctx, p, ETTest2, actress.EventKindStatic, test2Func).Act()
+					actress.NewProcess(ctx, p, ETTest2, actress.KindStatic, test2Func).Act()
 
 					upper := strings.ToUpper(string(result.Data))
-					p.StaticEventCh <- actress.Event{EventType: ETTest2, Data: []byte(upper)}
+					p.StaticEventCh <- actress.Event{Name: ETTest2, Data: []byte(upper)}
 
 				case <-ctx.Done():
 					return
@@ -67,7 +70,7 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, rootAct, ETTest1, actress.EventKindStatic, test1Func).Act()
+	actress.NewProcess(ctx, rootAct, ETTest1, actress.KindStatic, test1Func).Act()
 
 	// Start all the registered actors.
 	err := rootAct.Act()
@@ -78,9 +81,9 @@ func main() {
 	// Add and pass in an event that will be picked up by the actor
 	// registered for the ETTest1 EventType, and add "test" to the
 	// data field of the event.
-	rootAct.AddEvent(actress.Event{EventType: ETTest1,
-		EventKind: actress.EventKindStatic,
-		Data:      []byte("test")})
+	rootAct.AddEvent(actress.Event{Name: ETTest1,
+		Kind: actress.KindStatic,
+		Data: []byte("test")})
 	// Receive and print the result.
 	fmt.Printf("The result: %v\n", <-testCh)
 

@@ -26,7 +26,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, _ := actress.NewConfig()
+	cfg, _ := actress.NewConfig("debug")
 	// Create a new root process.
 	rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
 	rootAct.Act()

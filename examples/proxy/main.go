@@ -28,8 +28,8 @@ import (
 	"github.com/postmannen/actress"
 )
 
-const ETHttpGet actress.EventType = "ETHttpGet"
-const ETProxyListener actress.EventType = "ETProxyListener"
+const ETHttpGet actress.EventName = "ETHttpGet"
+const ETProxyListener actress.EventName = "ETProxyListener"
 
 func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 	fn := func() {
@@ -41,7 +41,7 @@ func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 				listenerET := evGetInit.Cmd[1]
 				thisET := evGetInit.Cmd[2]
 
-				actress.NewProcess(ctx, p, actress.EventType(thisET), actress.EventKindDynamic, func(ctx context.Context, p *actress.Process) func() {
+				actress.NewProcess(ctx, p, actress.EventName(thisET), actress.KindDynamic, func(ctx context.Context, p *actress.Process) func() {
 					return func() {
 						timeout := 5
 						ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
@@ -57,7 +57,7 @@ func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 						defer func() {
 							log.Printf("CANCELED DESTINATION, %v\n", thisET)
 							cancel()
-							defer p.DynamicProcesses.Delete(actress.EventType(thisET))
+							defer p.DynamicProcesses.Delete(actress.EventName(thisET))
 						}()
 
 						// destConn <- event
@@ -84,9 +84,9 @@ func etHttpGetFn(ctx context.Context, p *actress.Process) func() {
 							ccn, cce := destConn.Read(b)
 							log.Printf("READ destConn, n: %v, err: %v, %v\n", ccn, err, thisET)
 							if ccn > 0 {
-								p.AddEvent(actress.Event{EventType: actress.EventType(listenerET),
-									EventKind: actress.EventKindDynamic,
-									Data:      b[:ccn]})
+								p.AddEvent(actress.Event{Name: actress.EventName(listenerET),
+									Kind: actress.KindDynamic,
+									Data: b[:ccn]})
 								log.Printf("AFTER READING destConn, n: %v, and AFTER sending event, %v\n", ccn, thisET)
 							}
 							if cce != nil {
@@ -124,9 +124,9 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 			}
 
 			p.AddEvent(actress.Event{
-				EventType: ETHttpGet,
-				EventKind: actress.EventKindStatic,
-				Cmd:       cmd,
+				Name: ETHttpGet,
+				Kind: actress.KindStatic,
+				Cmd:  cmd,
 			})
 			log.Printf("Added Event to start up remote http get'er: %v\n", cmd)
 
@@ -141,7 +141,7 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			}
 
-			actress.NewProcess(ctx, p, actress.EventType(listenerET), actress.EventKindDynamic, func(ctx context.Context, p *actress.Process) func() {
+			actress.NewProcess(ctx, p, actress.EventName(listenerET), actress.KindDynamic, func(ctx context.Context, p *actress.Process) func() {
 				return func() {
 					// Event ET2 <- clientConn
 					go func() {
@@ -151,7 +151,7 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 							log.Printf("CLOSING: clientConn, %v", listenerET)
 							clientConn.Close()
 							p.Cancel()
-							defer p.DynamicProcesses.Delete(actress.EventType(listenerET))
+							defer p.DynamicProcesses.Delete(actress.EventName(listenerET))
 						}()
 
 						for {
@@ -160,9 +160,9 @@ func etProxyListenerFn(ctx context.Context, p *actress.Process) func() {
 							log.Printf("AFTER READING clientConn, n: %v, %v\n", ccn, listenerET)
 							//if ccn > 0 {
 
-							p.AddEvent(actress.Event{EventType: actress.EventType(geterET),
-								EventKind: actress.EventKindDynamic,
-								Data:      b[:ccn]})
+							p.AddEvent(actress.Event{Name: actress.EventName(geterET),
+								Kind: actress.KindDynamic,
+								Data: b[:ccn]})
 							log.Printf("AFTER READING clientConn, n: %v, and AFTER sending event, %v\n", ccn, listenerET)
 
 							//}
@@ -224,7 +224,7 @@ func main() {
 	defer cancel()
 
 	// Create a new root process.
-	cfg, _ := actress.NewConfig()
+	cfg, _ := actress.NewConfig("debug")
 	rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
 
 	// Start all the registered actors.
@@ -234,8 +234,8 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, rootAct, ETHttpGet, actress.EventKindStatic, etHttpGetFn).Act()
-	actress.NewProcess(ctx, rootAct, ETProxyListener, actress.EventKindStatic, etProxyListenerFn).Act()
+	actress.NewProcess(ctx, rootAct, ETHttpGet, actress.KindStatic, etHttpGetFn).Act()
+	actress.NewProcess(ctx, rootAct, ETProxyListener, actress.KindStatic, etProxyListenerFn).Act()
 
 	//rootAct.AddEvent(actress.Event{EventType: ETHttpGet, Cmd: []string{"http://vg.no"}})
 	// Receive and print the result.
