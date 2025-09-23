@@ -3,7 +3,6 @@ package actress
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 func TestECRouter(t *testing.T) {
@@ -14,25 +13,23 @@ func TestECRouter(t *testing.T) {
 
 	t.Logf("--------------------------------------------------------\n")
 
-	cfg, _ := NewConfig()
+	cfg, _ := NewConfig("debug")
 	rootp := NewRootProcess(ctx, nil, cfg, nil)
 	err := rootp.Act()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	NewProcess(ctx, rootp, ETTest, EventKindStatic, etTestfn(testCh)).Act()
-	NewProcess(ctx, rootp, ECGeneralDelivery, EventKindCustom, ecGeneralDeliveryFn).Act()
-
-	time.Sleep(time.Second * 2)
+	NewProcess(ctx, rootp, ETTest, KindStatic, etTestfn(testCh)).Act()
+	NewProcess(ctx, rootp, ECGeneralDelivery, KindCustom, ecGeneralDeliveryFn).Act()
 
 	testStr := "some custom data"
 
 	rootp.AddEvent(Event{
-		EventType: ECGeneralDelivery,
-		EventKind: EventKindCustom,
+		Name:      ECGeneralDelivery,
+		Kind:      KindCustom,
 		Data:      []byte(testStr),
-		NextEvent: &Event{EventType: ETTest, EventKind: EventKindStatic},
+		NextEvent: &Event{Name: ETTest, Kind: KindStatic},
 	})
 
 	select {

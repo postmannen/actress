@@ -20,13 +20,12 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
 )
 
 // Holds information about what process functions who belongs to what
 // event, and also a map of the started processes.
 type customProcesses struct {
-	procMap map[EventType]*Process
+	procMap map[EventName]*Process
 	mu      sync.Mutex
 }
 
@@ -35,7 +34,7 @@ type customProcesses struct {
 // *******************************************************************
 // TODO: Consider if we still need this function. It is not in use.
 // *******************************************************************
-func (p *customProcesses) Add(et EventType, proc *Process) {
+func (p *customProcesses) Add(et EventName, proc *Process) {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
 	p.mu.Lock()
@@ -47,7 +46,7 @@ func (p *customProcesses) Add(et EventType, proc *Process) {
 }
 
 // Delete an Event and it's process from the processes map.
-func (p *customProcesses) Delete(et EventType) {
+func (p *customProcesses) Delete(et EventName) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.procMap[et].Cancel()
@@ -56,7 +55,7 @@ func (p *customProcesses) Delete(et EventType) {
 }
 
 // Checks if the event is defined in the processes map, and returns true if it is.
-func (p *customProcesses) IsEventDefined(ev EventType) bool {
+func (p *customProcesses) IsEventDefined(ev EventName) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if _, ok := p.procMap[ev]; !ok {
@@ -69,7 +68,7 @@ func (p *customProcesses) IsEventDefined(ev EventType) bool {
 // Prepare and return a new *customProcesses structure.
 func newCustomProcesses() *customProcesses {
 	p := customProcesses{
-		procMap: make(map[EventType]*Process),
+		procMap: make(map[EventName]*Process),
 	}
 	return &p
 }
@@ -79,7 +78,7 @@ func newCustomProcesses() *customProcesses {
 // ------------------------------------------------------------------------------
 
 // Router for custom events.
-const ECRouter EventType = "ECRouter"
+const ECRouter EventName = "ECRouter"
 
 // Process function for routing and handling events. Will check
 // and route the event to the correct process.
@@ -97,7 +96,7 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 				if ev.NextEvent != nil {
 					// Keep the information about the current event, so we are able to check for things
 					// like ackTimeout and what node to reply back to if ack should be given.
-					ev.NextEvent.PreviousEvent = CopyEventFields(ev)
+					ev.NextEvent.PreviousEvent = CopyEventFields(&ev)
 				}
 
 				eventNr++
@@ -109,28 +108,28 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 				// The checking is done in a go routine so the router don't block
 				// here waiting, and we continue with the next event in the queue.
 				p.CustomProcesses.mu.Lock()
-				_, ok := p.CustomProcesses.procMap[ev.EventType]
+				_, ok := p.CustomProcesses.procMap[ev.Name]
 				p.CustomProcesses.mu.Unlock()
 				if !ok {
 					go func(ev Event) {
 						// Try to 3 times to deliver the message.
 						for i := 0; i < 3; i++ {
 							p.CustomProcesses.mu.Lock()
-							_, ok := p.CustomProcesses.procMap[ev.EventType]
+							_, ok := p.CustomProcesses.procMap[ev.Name]
 							p.CustomProcesses.mu.Unlock()
 
 							if !ok {
-								p.AddEvent(Event{EventType: ERLog,
-									EventKind: EventKindError,
-									Err:       fmt.Errorf("ecRouter: on %v found no process registered for the event type : %v, ev.DstNode: %v", p.Config.NodeName, ev.EventType, ev.DstNode)})
-								time.Sleep(time.Millisecond * 250)
+								p.AddEvent(Event{Name: ERLog,
+									Kind:        KindError,
+									Instruction: InstructionError,
+									Err:         fmt.Errorf("ecRouter: on %v found no process registered for the event type : %v, ev.DstNode: %v", p.Config.NodeName, ev.Name, ev.DstNode)})
 								continue
 							}
 
 							// Process is now registred, so we can safely put
 							//the event on the InCh of the process.
 							p.CustomProcesses.mu.Lock()
-							p.CustomProcesses.procMap[ev.EventType].InCh <- ev
+							p.CustomProcesses.procMap[ev.Name].InCh <- ev
 							p.CustomProcesses.mu.Unlock()
 
 							return
@@ -145,23 +144,24 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 				}
 
 				// Process was registered. Deliver the event to the process InCh.
-				// log.Printf(" -------- DEBUG1 %v ---------p.CustomProcesses.procMap[ev.EventType] : %v\n", p.Config.NodeName, p.CustomProcesses.procMap[ev.EventType])
-				// log.Printf(" -------- DEBUG2 %v---------p ev.EventType : %v\n", p.Config.NodeName, ev.EventType)
-				// log.Printf(" -------- DEBUG3.1 %v---------p.CustomProcesses.procMap : %+v\n", p.Config.NodeName, p.CustomProcesses.procMap)
-				// log.Printf(" -------- DEBUG3 %v---------p.CustomProcesses.procMap[ev.EventType].InCh : %v\n", p.Config.NodeName, p.CustomProcesses.procMap[ev.EventType].InCh)
 
 				p.CustomProcesses.mu.Lock()
-				inCh := p.CustomProcesses.procMap[ev.EventType].InCh
+				inCh := p.CustomProcesses.procMap[ev.Name].InCh
 				p.CustomProcesses.mu.Unlock()
 
-				fmt.Printf("DEBUG: Routing event, %v, node: %v, eventType: %v, .Inch: %v\n", p.Event, p.Config.NodeName, ev.EventType, inCh)
+				p.AddEvent(Event{Name: ERLog,
+					Instruction: InstructionDebug,
+					Kind:        KindError,
+					Err:         fmt.Errorf("ecRouterFn on %v, Routing event, %v, node: %v, name: %v, .Inch: %v", p.Config.NodeName, p.Event, p.Config.NodeName, ev.Name, inCh)})
+
 				inCh <- ev
 
 			case <-p.Ctx.Done():
 				p.AddEvent(Event{
-					EventType: ERLog,
-					EventKind: EventKindError,
-					Err:       fmt.Errorf("info: got ctx.Done"),
+					Name:        ERLog,
+					Kind:        KindError,
+					Instruction: InstructionError,
+					Err:         fmt.Errorf("info: got ctx.Done"),
 				})
 
 				return
@@ -174,7 +174,7 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 
 // Primarily used for testing to check that the ECRouter properly routes events, and that
 // custom processes start up correctly.
-const ECGeneralDelivery EventType = "ECGeneralDelivery"
+const ECGeneralDelivery EventName = "ECGeneralDelivery"
 
 // Primarily used for testing to check that the ECRouter properly routes events, and that
 // custom processes start up correctly.
@@ -194,9 +194,10 @@ func ecGeneralDeliveryFn(ctx context.Context, p *Process) func() {
 
 			case <-p.Ctx.Done():
 				p.AddEvent(Event{
-					EventType: ERLog,
-					EventKind: EventKindError,
-					Err:       fmt.Errorf("info: got ctx.Done"),
+					Name:        ERLog,
+					Kind:        KindError,
+					Instruction: InstructionError,
+					Err:         fmt.Errorf("info: got ctx.Done"),
 				})
 
 				return

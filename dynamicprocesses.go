@@ -28,7 +28,7 @@ import (
 // Holds information about what process functions who belongs to what
 // event, and also a map of the started processes.
 type dynamicProcesses struct {
-	procMap map[EventType]*Process
+	procMap map[EventName]*Process
 	mu      sync.Mutex
 }
 
@@ -37,7 +37,7 @@ type dynamicProcesses struct {
 // *******************************************************************
 // TODO: Consider if we still need this function. It is not in use.
 // *******************************************************************
-func (p *dynamicProcesses) Add(et EventType, proc *Process) {
+func (p *dynamicProcesses) Add(et EventName, proc *Process) {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
 	p.mu.Lock()
@@ -49,7 +49,7 @@ func (p *dynamicProcesses) Add(et EventType, proc *Process) {
 }
 
 // Delete an Event and it's process from the processes map.
-func (p *dynamicProcesses) Delete(et EventType) {
+func (p *dynamicProcesses) Delete(et EventName) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	// p.procMap[et].Cancel()
@@ -58,7 +58,7 @@ func (p *dynamicProcesses) Delete(et EventType) {
 }
 
 // Checks if the event is defined in the processes map, and returns true if it is.
-func (p *dynamicProcesses) IsEventDefined(ev EventType) bool {
+func (p *dynamicProcesses) IsEventDefined(ev EventName) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if _, ok := p.procMap[ev]; !ok {
@@ -71,7 +71,7 @@ func (p *dynamicProcesses) IsEventDefined(ev EventType) bool {
 // Prepare and return a new *dynamicProcesses structure.
 func newDynamicProcesses() *dynamicProcesses {
 	p := dynamicProcesses{
-		procMap: make(map[EventType]*Process),
+		procMap: make(map[EventName]*Process),
 	}
 	return &p
 }
@@ -87,7 +87,7 @@ func NewUUID() string {
 // ------------------------------------------------------------------------------
 
 // Router for normal events.
-const EDRouter EventType = "EDRouter"
+const EDRouter EventName = "EDRouter"
 
 // Process function for routing and handling events. Will check
 // and route the event to the correct process.
@@ -106,7 +106,7 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 				if ev.NextEvent != nil {
 					// Keep the information about the current event, so we are able to check for things
 					// like ackTimeout and what node to reply back to if ack should be given.
-					ev.NextEvent.PreviousEvent = CopyEventFields(ev)
+					ev.NextEvent.PreviousEvent = CopyEventFields(&ev)
 				}
 
 				eventNr++
@@ -118,28 +118,30 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 				// The checking is done in a go routine so the router don't block
 				// here waiting, and we continue with the next event in the queue.
 				p.DynamicProcesses.mu.Lock()
-				_, ok := p.DynamicProcesses.procMap[ev.EventType]
+				_, ok := p.DynamicProcesses.procMap[ev.Name]
 				p.DynamicProcesses.mu.Unlock()
 				if !ok {
 					go func(ev Event) {
 						// Try to 3 times to deliver the message.
 						for i := 0; i < 3; i++ {
 							p.DynamicProcesses.mu.Lock()
-							_, ok := p.DynamicProcesses.procMap[ev.EventType]
+							_, ok := p.DynamicProcesses.procMap[ev.Name]
 							p.DynamicProcesses.mu.Unlock()
 
 							if !ok {
-								p.AddEvent(Event{EventType: ERLog,
-									EventKind: EventKindError,
-									Err:       fmt.Errorf("edRouter: on %v found no process registered for the event type : %v, ev.DstNode: %v", p.Config.NodeName, ev.EventType, ev.DstNode)})
-								time.Sleep(time.Millisecond * 250)
+								p.AddEvent(Event{Name: ERLog,
+									Kind:        KindError,
+									Instruction: InstructionError,
+									Err:         fmt.Errorf("edRouter: on %v found no process registered for the event type : %v, ev.DstNode: %v", p.Config.NodeName, ev.Name, ev.DstNode)})
+								// TODO: Is it possible to figure out a better way to do this, than waiting and retrying?
+								time.Sleep(time.Second * 1)
 								continue
 							}
 
 							// Process is now registred, so we can safely put
 							//the event on the InCh of the process.
 							p.DynamicProcesses.mu.Lock()
-							p.DynamicProcesses.procMap[ev.EventType].InCh <- ev
+							p.DynamicProcesses.procMap[ev.Name].InCh <- ev
 							p.DynamicProcesses.mu.Unlock()
 
 							return
@@ -155,17 +157,22 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 
 				// Process was registered. Deliver the event to the process InCh.
 				p.DynamicProcesses.mu.Lock()
-				inCh := p.DynamicProcesses.procMap[ev.EventType].InCh
+				inCh := p.DynamicProcesses.procMap[ev.Name].InCh
 				p.DynamicProcesses.mu.Unlock()
 
-				fmt.Printf("DEBUG: Routing event, %v, node: %v, eventType: %v, .Inch: %v\n", p.Event, p.Config.NodeName, ev.EventType, inCh)
+				p.AddEvent(Event{Name: ERLog,
+					Instruction: InstructionDebug,
+					Kind:        KindError,
+					Err:         fmt.Errorf("edRouterFn on %v, Routing event, %v, node: %v, name: %v, .Inch: %v", p.Config.NodeName, p.Event, p.Config.NodeName, ev.Name, inCh)})
+
 				inCh <- ev
 
 			case <-p.Ctx.Done():
 				p.AddEvent(Event{
-					EventType: ERLog,
-					EventKind: EventKindError,
-					Err:       fmt.Errorf("info: got ctx.Done"),
+					Name:        ERLog,
+					Kind:        KindError,
+					Instruction: InstructionError,
+					Err:         fmt.Errorf("info: got ctx.Done"),
 				})
 
 				return
@@ -173,5 +180,35 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 		}
 	}
 
+	return fn
+}
+
+// ETSync is used to syncronize events.
+// The ETSyncFn that is to be used with this event type takes a
+// signal channel, we can then use this event type to signal that
+// another event is done before we continue by setting this event
+// type as the NextEvent.
+const ETSync EventName = "ETSync"
+
+// EtSyncFn is the function that will be used to syncronize events.
+// It takes a channel that will be used to send a signal on when the
+// ETSync event is executed.
+//
+// In general ETSync is used to syncronize one-off events, so delete
+// the process after it is done with it's sync job.
+func ETSyncFn(syncCh chan struct{}) ETFunc {
+	fn := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			for {
+				select {
+				case <-p.InCh:
+					syncCh <- struct{}{}
+				case <-p.Ctx.Done():
+					return
+				}
+			}
+		}
+		return fn
+	}
 	return fn
 }

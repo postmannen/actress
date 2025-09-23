@@ -10,13 +10,13 @@ import (
 
 type supervisorProcesses struct {
 	mu      sync.Mutex
-	procMap map[EventType]*Process
+	procMap map[EventName]*Process
 }
 
 // Prepare and return a new *processes structure.
 func newsuperVisorProcesses() *supervisorProcesses {
 	p := supervisorProcesses{
-		procMap: make(map[EventType]*Process),
+		procMap: make(map[EventName]*Process),
 	}
 	return &p
 }
@@ -26,7 +26,7 @@ func newsuperVisorProcesses() *supervisorProcesses {
 // ------------------------------------------------------------------------------
 
 // Router for supervisor events.
-const ESRouter EventType = "ESRouter"
+const ESRouter EventName = "ESRouter"
 
 // Process function for routing and handling supervisor events. Will check
 // and route the event to the correct process.
@@ -45,7 +45,7 @@ func esRouterFn(ctx context.Context, p *Process) func() {
 				if ev.NextEvent != nil {
 					// Keep the information about the current event, so we are able to check for things
 					// like ackTimeout and what node to reply back to if ack should be given.
-					ev.NextEvent.PreviousEvent = CopyEventFields(ev)
+					ev.NextEvent.PreviousEvent = CopyEventFields(&ev)
 				}
 
 				eventNr++
@@ -53,32 +53,35 @@ func esRouterFn(ctx context.Context, p *Process) func() {
 
 				// Check if process is registred and valid.
 				p.supervisorProcesses.mu.Lock()
-				_, ok := p.supervisorProcesses.procMap[ev.EventType]
+				_, ok := p.supervisorProcesses.procMap[ev.Name]
 				p.supervisorProcesses.mu.Unlock()
 
 				if !ok {
-					p.AddEvent(Event{EventType: ERFatal,
-						EventKind: EventKindError,
-						Err:       fmt.Errorf("etRouter: on %v found no process registered for the event type : %v", p.Config.NodeName, ev.EventType)})
+					p.AddEvent(Event{Name: ERLog,
+						Instruction: InstructionFatal,
+						Kind:        KindError,
+						Err:         fmt.Errorf("etRouter: on %v found no process registered for the event type : %v", p.Config.NodeName, ev.Name)})
 				}
 
 				// // Process was registered. Deliver the event to the process InCh.
-				// log.Printf(" -------- DEBUG1 %v ---------p.supervisorProcesses.procMap[ev.EventType] : %v\n", p.Config.NodeName, p.supervisorProcesses.procMap[ev.EventType])
-				// log.Printf(" -------- DEBUG2 %v---------p ev.EventType : %v\n", p.Config.NodeName, ev.EventType)
-				// log.Printf(" -------- DEBUG3 %v---------p.supervisorProcesses.procMap[ev.EventType].InCh : %v\n", p.Config.NodeName, p.supervisorProcesses.procMap[ev.EventType].InCh)
 
 				p.supervisorProcesses.mu.Lock()
-				inCh := p.supervisorProcesses.procMap[ev.EventType].InCh
+				inCh := p.supervisorProcesses.procMap[ev.Name].InCh
 				p.supervisorProcesses.mu.Unlock()
 
-				fmt.Printf("DEBUG: Routing event, %v, node: %v, eventType: %v, .Inch: %v\n", p.Event, p.Config.NodeName, ev.EventType, inCh)
+				p.AddEvent(Event{Name: ERLog,
+					Instruction: InstructionDebug,
+					Kind:        KindError,
+					Err:         fmt.Errorf("esRouterFn on %v, Routing event, %v, node: %v, name: %v, .Inch: %v", p.Config.NodeName, p.Event, p.Config.NodeName, ev.Name, inCh)})
+
 				inCh <- ev
 
 			case <-p.Ctx.Done():
 				p.AddEvent(Event{
-					EventType: ERLog,
-					EventKind: EventKindError,
-					Err:       fmt.Errorf("info: got ctx.Done"),
+					Name:        ERLog,
+					Instruction: InstructionInfo,
+					Kind:        KindError,
+					Err:         fmt.Errorf("info: got ctx.Done"),
 				})
 
 				return
@@ -94,7 +97,7 @@ func esRouterFn(ctx context.Context, p *Process) func() {
 // ------------------------------------------------------------------------------
 
 // Handles information about the currently running processes in the local Actress system.
-const ESProcesses EventType = "ESProcesses"
+const ESProcesses EventName = "ESProcesses"
 
 // Will instruct to get all information about all processes.
 const InstructionESProcessesAdd Instruction = "InstructionESProcessesAdd"
@@ -102,11 +105,11 @@ const InstructionESProcessesDelete Instruction = "InstructionESProcessesDelete"
 const InstructionESProcessesGetAll Instruction = "InstructionESProcessesGetAll"
 
 type esProcessesMapDataIn struct {
-	EventType EventType
-	EventKind EventKind
+	Name EventName
+	Kind Kind
 }
 
-type ESProcessesMap map[EventType]EventKind
+type ESProcessesMap map[EventName]Kind
 
 // ETFunc for handling information about the currently running processes in the local Actress system.
 func esProcessesFn() ETFunc {
@@ -129,15 +132,19 @@ func esProcessesFn() ETFunc {
 						err := cbor.Unmarshal(ev.Data, &md)
 						if err != nil {
 							p.AddEvent(Event{
-								EventType: ERLog,
-								EventKind: EventKindError,
-								Err:       fmt.Errorf("failed to unmarshal esProcesses map in data: %v", err),
+								Name:        ERLog,
+								Kind:        KindError,
+								Instruction: InstructionFatal,
+								Err:         fmt.Errorf("failed to unmarshal esProcesses map in data: %v", err),
 							})
 						}
 
-						processMap[md.EventType] = md.EventKind
+						processMap[md.Name] = md.Kind
 
-						// fmt.Printf("DEBUG: esProcessesfn, processesMap: %+v\n", processMap)
+						p.AddEvent(Event{Name: ERLog,
+							Instruction: InstructionDebug,
+							Kind:        KindError,
+							Err:         fmt.Errorf("esProcessesfn on %v, processesMap: %+v", p.Config.NodeName, processMap)})
 
 						// Nothing to output are produced so we just add for the .NextEvent if defined.
 						if ev.NextEvent != nil {
@@ -150,9 +157,10 @@ func esProcessesFn() ETFunc {
 						err := cbor.Unmarshal(ev.Data, &md)
 						if err != nil {
 							p.AddEvent(Event{
-								EventType: ERLog,
-								EventKind: EventKindError,
-								Err:       fmt.Errorf("failed to unmarshal esProcesses map in data: %v", err),
+								Name:        ERLog,
+								Kind:        KindError,
+								Instruction: InstructionFatal,
+								Err:         fmt.Errorf("failed to unmarshal esProcesses map in data: %v", err),
 							})
 						}
 
@@ -168,9 +176,10 @@ func esProcessesFn() ETFunc {
 						b, err := cbor.Marshal(processMap)
 						if err != nil {
 							p.AddEvent(Event{
-								EventType: ERLog,
-								EventKind: EventKindError,
-								Err:       fmt.Errorf("failed to marshal esProcesses for push all: %v", err),
+								Name:        ERLog,
+								Kind:        KindError,
+								Instruction: InstructionFatal,
+								Err:         fmt.Errorf("failed to marshal esProcesses for push all: %v", err),
 							})
 						}
 
@@ -183,17 +192,19 @@ func esProcessesFn() ETFunc {
 
 					default:
 						p.AddEvent(Event{
-							EventType: ERFatal,
-							EventKind: EventKindError,
-							Err:       fmt.Errorf("esProcesses: not a defined instruction: %v", ev.Instruction),
+							Name:        ERLog,
+							Instruction: InstructionFatal,
+							Kind:        KindError,
+							Err:         fmt.Errorf("esProcesses: not a defined instruction: %v", ev.Instruction),
 						})
 					}
 
 				case <-p.Ctx.Done():
 					p.AddEvent(Event{
-						EventType: ERLog,
-						EventKind: EventKindError,
-						Err:       fmt.Errorf("info: got ctx.Done"),
+						Name:        ERLog,
+						Kind:        KindError,
+						Instruction: InstructionInfo,
+						Err:         fmt.Errorf("info: got ctx.Done"),
 					})
 
 					return

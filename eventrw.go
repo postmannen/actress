@@ -43,16 +43,16 @@ func NewEventRW(p *Process, ev *Event, info string) *EventRW {
 // Write the data into Event.Data, and put the event into the StaticEventCh to be processed.
 func (m *EventRW) Write(b []byte) (int, error) {
 
-	fmt.Printf(" *2 DEBUG WRITE: ev nr: %v, info: %v , eventType: %v, PREPARING for Writing to erw, len(b): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.
-		EventType, len(b), string(b))
+	fmt.Printf(" *2 DEBUG WRITE: ev nr: %v, info: %v , name: %v, PREPARING for Writing to erw, len(b): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.
+		Name, len(b), string(b))
 
 	if len(b) > 0 {
 		ev := m.Ev
 		ev.Data = b
-		// Todo: Make this one generic to cath both standard, custom, and dynamic event?
+
 		m.P.AddEvent(*ev)
-		fmt.Printf(" *2 DEBUG WRITE: ev nr: %v, info: %v , eventType: %v, DONE Writing to erw, len(b): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.
-			EventType, len(b), string(b))
+		fmt.Printf(" *2 DEBUG WRITE: ev nr: %v, info: %v , name: %v, DONE Writing to erw, len(b): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.
+			Name, len(b), string(b))
 	}
 
 	log.Printf("%v, len: %v when writing, not adding an event\n", m.Info, len(b))
@@ -62,15 +62,15 @@ func (m *EventRW) Write(b []byte) (int, error) {
 // Read the data into b.
 func (m *EventRW) Read(b []byte) (int, error) {
 	if m.Pos >= len(m.Ev.Data) {
-		fmt.Printf(" *1 DEBUG READ: ev nr: %v, info: %v, eventType: %v, EOF reading from erw, len(m.ev.Data): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.EventType, len(m.Ev.Data), string(m.Ev.Data))
+		fmt.Printf(" *1 DEBUG READ: ev nr: %v, info: %v, name: %v, EOF reading from erw, len(m.ev.Data): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.Name, len(m.Ev.Data), string(m.Ev.Data))
 		return 0, io.EOF
 	}
 
-	fmt.Printf(" *1 DEBUG READ: ev nr: %v, info: %v, eventType: %v, PREPARING reading from erw, len(m.ev.Data): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.EventType, len(m.Ev.Data), string(m.Ev.Data))
+	fmt.Printf(" *1 DEBUG READ: ev nr: %v, info: %v, name: %v, PREPARING reading from erw, len(m.ev.Data): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.Name, len(m.Ev.Data), string(m.Ev.Data))
 
 	n := copy(b, m.Ev.Data[m.Pos:])
 
-	fmt.Printf(" *1 DEBUG READ: ev nr: %v, info: %v, eventType: %v, DONE reading from erw, len(m.ev.Data): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.EventType, len(m.Ev.Data), string(m.Ev.Data))
+	fmt.Printf(" *1 DEBUG READ: ev nr: %v, info: %v, name: %v, DONE reading from erw, len(m.ev.Data): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.Name, len(m.Ev.Data), string(m.Ev.Data))
 
 	m.Pos += n
 	return n, nil

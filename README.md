@@ -2,34 +2,34 @@
 
 A Concurrent Actor framework written in Go.
 
+**NB: This is still in the idea phase, so concepts are being tested out and things might/will change rapidly. 
+<u>Expect breaking changes between commits</u>**.
+
 ## Overview
 
 Create custom processes where what the processes do are either your own piece of code, or it can be a command called from the Operating system. The processes can communicate by sending events to pass the result from one processes to the next for further processing, or by chaining together process as workflows to create a series of Events that together will provide some end result.
 
 ### Processes
 
-A process are like a module capable of performing a specific tasks. The nature of the process is determined by an EventType and a Function attached to each process. A process have an InCh for receiving events, and an AddEvent for sending Events. The processes can themselves spawn new processes. Processes can also send Event messages to other processes.
+A process are like a module capable of performing a specific tasks. The nature of the process is determined by an Name and a Function attached to each process. A process have an InCh for receiving events, and an AddEvent function for sending Events. The processes can themselves spawn new processes. Processes can also send Event messages to other processes.
 
 A process can hold state within the Process Function.
 
 ### Events
 
-To initiate and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as communication channels within the system. They can carry data, either with the result of something a process did to pass it on to the next process for further processing, instructions for what a process should do, or both. An event can contain a chain of events to create workflows of what do do and in what order by using the NextEvent feature (see examples for usage).
+To initiate and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as the communication within the system. They can carry data, either with the result of something a process did to pass it on to the next process for further processing, instructions for what a process should do, or both. An event can contain a chain of events to create workflows of what do do and in what order by using the NextEvent feature (see examples for usage).
 
 ```Go
 type Event struct {
     Nr int
-    // EventType is a unique name to identify the type of the event.
-    EventType EventType `json:"eventType" yaml:"eventType" cbor:"eventType"`
-    // EventKind is a more general way to describe the event that can
+    // Name is a unique name to identify the type of the event.
+    Name EventName `json:"name" yaml:"name" cbor:"name"`
+    // Kind is a more general way to describe the event that can
     // be used to destinguish if it is static, error or dynamic event.
-    EventKind EventKind `json:"eventKind" yaml:"eventKind" cbor:"eventKind"`
+    Kind Kind `json:"kind" yaml:"kind" cbor:"kind"`
     // Cmd is usually used for giving instructions or parameters for
     // what an event shall do.
     Cmd []string `json:"cmd" yaml:"cmd" cbor:"cmd"`
-    // Args are similar to Cmd, but the parameters can be stored in
-    // a hashmap as key/value items.
-    Args map[string]string `json:"args" yaml:"args" cbor:"args"`
     // Data usually carries the data from one process to the next. Example
     // could be a file read on process1 is put in the Data field, and
     // passed on to process2 to be unmarshaled.
@@ -53,11 +53,11 @@ type Event struct {
 }
 ```
 
-### Event Functions
+### Event Functions (ETFunc)
 
-Event Functions holds the logic for what a process shall do when an event is received, and what to do with the data the event carries. The Event functions are callback functions that are executed when a process are created.
+Event Functions holds the logic for what a process shall do when an event is received, and what to do with the data the event carries. The Event functions are callback functions that are executed when a process is created.
 
-The programmer can decide if the Process Function should depend on the input from the input channel of the process, or just continously do some work on it's own. For an event function to be triggered to work on events it should hold a for loop that listens on the Process InCh for new Events.
+The programmer can decide if the Process Function should depend on the input from the input channel of the process, or just continously do some work on it's own. For an event function to be triggered to work on events it should hold a **for** loop that listens on the Process InCh for new Events.
 
 ### Examples
 
@@ -82,16 +82,23 @@ func main() {
     defer cancel()
 
     // Create a new root process.
-    cfg, _ := actress.NewConfig()
+    cfg, _ := actress.NewConfig("debug")
     rootAct := actress.NewRootProcess(ctx, nil, cfg, nil)
+
+    // Start the root process/actor.
+    err := rootAct.Act()
+    if err != nil {
+        log.Fatal(err)
+    }
+
     // Create a test channel where we receive the end result.
     testCh := make(chan string)
 
-    // Define two event typess for two processes.
-    const ETTest1 actress.EventType = "ETTest1"
-    const ETTest2 actress.EventType = "ETTest2"
+    // Define two event's for two processes.
+    const ETTest1 actress.Name = "ETTest1"
+    const ETTest2 actress.Name = "ETTest2"
 
-    // Define the first function that will be attached to the ETTest1 EventType process.
+    // Define the first ETFunc function that will be attached to the ETTest1 Name process.
     test1Func := func(ctx context.Context, p *actress.Process) func() {
         fn := func() {
             for {
@@ -99,9 +106,9 @@ func main() {
                 case ev := <-p.InCh:
                     upper := strings.ToUpper(string(ev.Data))
                     // Pass on the processing to the next process, and use the NextEvent we have specified in main
-                    // for the EventType, and add the result of ToUpper to the data field.
-                    p.AddEvent(actress.Event{EventType: ev.NextEvent.EventType,
-                        EventKind: ev.NextEvent.EventKind,
+                    // for the Name, and add the result of ToUpper to the data field.
+                    p.AddEvent(actress.Event{Name: ev.NextEvent.Name,
+                        Kind: ev.NextEvent.Kind,
                         Data:      []byte(upper)})
                 case <-ctx.Done():
                     return
@@ -111,7 +118,7 @@ func main() {
         return fn
     }
 
-    // Define the second function that will be attached to the ETTest2 EventType process.
+    // Define the second ETFunc function that will be attached to the ETTest2 Name process.
     test2Func := func(ctx context.Context, p *actress.Process) func() {
         fn := func() {
             for {
@@ -122,8 +129,8 @@ func main() {
                     testCh <- string(dots)
 
                     // Also create an informational error message.
-                    p.AddEvent(actress.Event{EventType: actress.ERDebug,
-                        EventKind: actress.EventKindError,
+                    p.AddEvent(actress.Event{Name: actress.ERDebug,
+                        Kind: actress.KindError,
                         Err:       fmt.Errorf("info: done with the acting")})
 
                 case <-ctx.Done():
@@ -134,24 +141,19 @@ func main() {
         return fn
     }
 
-    // Register the event types and event function to processes.
-    actress.NewProcess(ctx, rootAct, ETTest1, actress.EventKindStatic, test1Func).Act()
-    actress.NewProcess(ctx, rootAct, ETTest2, actress.EventKindStatic, test2Func).Act()
+    // Register the event names and event function as processes,
+    // and start them with the Act() method.
+    actress.NewProcess(ctx, rootAct, ETTest1, actress.KindStatic, test1Func).Act()
+    actress.NewProcess(ctx, rootAct, ETTest2, actress.KindStatic, test2Func).Act()
 
-    // Start all the registered processes.
-    err := rootAct.Act()
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Pass in an event destined for an ETTest1 EventType process, and also specify
+    // Pass in an event destined for an ETTest1 Name process, and also specify
     // the next event to be used when passing the result on from ETTest1 to the next
     // process which here is ETTest2.
-    rootAct.AddEvent(actress.Event{EventType: ETTest1,
-        EventKind: actress.EventKindStatic,
+    rootAct.AddEvent(actress.Event{Name: ETTest1,
+        Kind: actress.KindStatic,
         Data:      []byte("test"),
-        NextEvent: &actress.Event{EventType: ETTest2,
-            EventKind: actress.EventKindStatic},
+        NextEvent: &actress.Event{Name: ETTest2,
+            Kind: actress.KindStatic},
     },
     )
 
@@ -166,34 +168,34 @@ func main() {
 
 Short intro about the Events.
 
-The event for all processes, both static, dynamic, error, and supervisor uses the same event type and structure.
-What makes an event for example a Static or an Error is the EventKind field of the Event which can have values like **EventKindStatic**, **EventKindDynamic**, **EventKindError** or **EventKindSupervisor**.
+The events for all processes, both static, dynamic, error, and supervisor uses the same event type and structure.
+What makes an event for example a Static or an Error is the Kind field of the Event which can have values like **KindStatic**, **KindDynamic**, **KindCustom**, **KindError** or **KindSupervisor**.
 
-The reason for splitting them up with the use of EventKind are a **separation** and use of **mutex'es** , for example if the event routing logic hangs on static events, it will not affect the other event kinds, so we are able to for example send errors if any of the other routers are having trouble or have massive load.
+The reason for splitting them up with the use of **Kind** are for **separation** and use of **mutex'es** , for example if the event routing logic hangs on static events, it will not affect the other event kinds, so we are able to for example send errors if any of the other routers are having trouble or have massive load.
 
 ### Where to use an actor process of a specific kind ?
 
-**EventKindStatic processes**, should only be used for processes/actors defined at startup. Event lookups for finding the right actor **are not protected by a mutex**.  
-**EventKindDynamic processes**, Can be used both for startup and runtime defined actors, but prefer static at startup unless you have a really good reason to not do it :). Event lookups for finding the right actor **are protected by a mutex**.
-**EventKindError processes** For error logging and handling.
-**EventKindSupervisor processes** For control logic and information about the whole Actress system.
+**KindStatic processes**, should only be used for processes/actors defined at startup. Event lookups for finding the right actor **are not protected by a mutex**.  
+**KindDynamic processes**, Can be used both for startup and runtime defined actors, but prefer static at startup unless you have a really good reason to not do it :). Event lookups for finding the right actor **are protected by a mutex**.
+**KindError processes** For error logging and handling.
+**KindSupervisor processes** For control logic and information about the whole Actress system.
 
 ### Custom Events Processes
 
-Custom Event Processes allows for dynimally adding new EventTypes and Processes at runtime. This feature is enabled by setting the `CUSTOMEVENTS` env variable to `true`, and also the path for where to look for configs with `CUSTOMEVENTSPATH`. The folder is continously being watched for changes, so any updates to config JSON files will be activated immediately. For adding custom event, put files in the `CUSTOMEVENTSPATH` with the extension `.json`. The files should be in the same format as an **Event**.
+Custom Event Processes allows for dynimally adding new Names and Processes at runtime. This feature is enabled by setting the `CUSTOMEVENTS` env variable to `true`, and also the path for where to look for configs with `CUSTOMEVENTSPATH`. The folder is continously being watched for changes, so any updates to config JSON files will be activated immediately. For adding custom event, put files in the `CUSTOMEVENTSPATH` with the extension `.json`. The files should be in the same format as an **Event**.
 
 ```json
 {"Name":"ET1","Cmd":["/bin/bash","-c"]}
 ```
 
-The example above will automatically create a Process that have an EventType of `ET1`. We can then send Events using `ET1` as the EventType, and what we put in Event.Cmd will be appended to the existing values that already exist in the Custom Event. Example follows.
+The example above will automatically create a Process that have an Name of `ET1`. We can then send Events using `ET1` as the Name, and what we put in Event.Cmd will be appended to the existing values that already exist in the Custom Event. Example follows.
 
 #### Custom Event Example 1
 
 We use the Custom Event from above, and add a new event using `ET1` like this:
 
 ```go
-p.AddEvent(Event{EventType: EventType("ET1"), Cmd: []string{"ls -l"}})
+p.AddEvent(Event{Name: Name("ET1"), Cmd: []string{"ls -l"}})
 ```
 
 When the Event is received at the ET1 process it's Cmd is appended what was defined earlier when creating the ET1 Process. The end result of the Cmd field will be `[]string{"/bin/bash","-c","ls -l"}` which is then executed.
@@ -209,7 +211,7 @@ We can also add the whole command to be executed in the `.json` file likes this.
 Since this Event specification is complete in itself we don't have to use the Cmd field when adding an Event to use it.
 
 ```go
-p.AddEvent(Event{EventType: EventType("ETBleeping")})
+p.AddEvent(Event{Name: Name("ETBleeping")})
 ```
 
 ## NextEvent
@@ -217,11 +219,11 @@ p.AddEvent(Event{EventType: EventType("ETBleeping")})
 NextEvent makes it possible to define an event as a chain of Events. An example could be that we want to get the content of a web page, and print the result to the screen. We could do that in the following way.
 
 ```go
-p.AddEvent(Event{EventType: EventType("ETBleeping"), NextEvent: &Event{EventType: ETPrint}})
+p.AddEvent(Event{Name: Name("ETBleeping"), NextEvent: &Event{Name: ETPrint}})
 ```
 
 ## Dynamic Processes
 
-The purpose of dynamic processes is to have short lived processes that can be quickly started, and removed again when it's job is done. The only difference between a "normal" process and a dynamic process are that the dynamic processes have a mutex in the processes map DynamicProcesses so we also can delete the processes when they are no longer needed.
+The purpose of dynamic processes is to have short lived processes that can be quickly started, and removed again when it's job is done. The only difference between a Static process and a Dynamic process are that the dynamic processes have a mutex in the DynamicProcesses map so that we can delete the processes when they are no longer needed at runtime withhout causing a datarace.
 
-A typical example could be that there is a processes that needs to communicate in some other way with another process than cant be done with the current process's event channel. We can then spawn a dynamic process to take care of that. Check out the test and files in the examples directory. One process can spawn as many dynamic processes as it needs.
+A typical example could be that there is a processes that needs to communicate in some other way with another process that cant be done with the current process's event channel. We can then spawn a dynamic process to take care of that. Check out the test and files in the examples directory. A process can spawn as many dynamic processes as it needs.

@@ -20,7 +20,7 @@ import (
 )
 
 // Event defines an event. It holds:
-//   - The EventType, which specifies the process are meant for.
+//   - The Name, which specifies the process are meant for.
 //   - The Cmd, are meant to but not limited to be a way to give
 //     instructions for what a process should do. The receiving
 //     process are responsible for parsing the string slice into
@@ -30,7 +30,7 @@ import (
 //   - Both Cmd and Data can be used interchangeably if it makes
 //     more sense for a given scenario. No strict rules for this
 //     exist. Just make sure to document the use of the given
-//     EventType, so the structure of how to use the fields exist.
+//     Name, so the structure of how to use the fields exist.
 //   - Err, are used by the error event type (ER).
 //   - NextEvent are used when we want to define a chain of events
 //     to be executed. The processes must make use of the field
@@ -38,11 +38,11 @@ import (
 //     example for how it could be implemented.
 type Event struct {
 	Nr int
-	// EventType is a unique name to identify the type of the event.
-	EventType EventType `json:"eventType" yaml:"eventType" cbor:"eventType"`
-	// EventKind is a more general way to describe the event that can
+	// Name is a unique name to identify the type of the event.
+	Name EventName `json:"name" yaml:"name" cbor:"name"`
+	// Kind is a more general way to describe the event that can
 	// be used to destinguish if it is static, error or dynamic event.
-	EventKind EventKind `json:"eventKind" yaml:"eventKind" cbor:"eventKind"`
+	Kind Kind `json:"kind" yaml:"kind" cbor:"kind"`
 	// Cmd is usually used for giving instructions or parameters for
 	// what an event shall do.
 	Cmd []string `json:"cmd" yaml:"cmd" cbor:"cmd"`
@@ -50,9 +50,6 @@ type Event struct {
 	// be used to give for example an instruction of a single word.
 	// For example in switch statements at the receiving actor, or other.
 	Instruction Instruction
-	// Args are similar to Cmd, but the parameters can be stored in
-	// a hashmap as key/value items.
-	Args map[string]string `json:"args" yaml:"args" cbor:"args"`
 	// Data usually carries the data from one process to the next. Example
 	// could be a file read on process1 is put in the Data field, and
 	// passed on to process2 to be unmarshaled.
@@ -77,10 +74,10 @@ type Event struct {
 
 type Instruction string
 
-type EventKind string
+type Kind string
 
-const EventKindStatic EventKind = "EventKindStatic"
-const EventKindError EventKind = "EventKindError"
+const KindStatic Kind = "KindStatic"
+const KindError Kind = "KindError"
 
 // NewDynProcess will prepare and return a *Process. It will copy
 // channels and map structures from the root process.
@@ -89,16 +86,16 @@ const EventKindError EventKind = "EventKindError"
 // The only difference between a process and a dynamic process are that
 // the dynamic processes have a mutex in processes map DynamicProcesses so
 // we also can delete the processes when they are no longer needed.
-const EventKindDynamic EventKind = "EventKindDynamic"
-const EventKindCustom EventKind = "EventKindCustom"
-const EventKindSupervisor EventKind = "EventKindSupervisor"
+const KindDynamic Kind = "KindDynamic"
+const KindCustom Kind = "KindCustom"
+const KindSupervisor Kind = "KindSupervisor"
 
 type Node string
 
 type EventOpt func(*Event)
 
-func NewEvent(et EventType, opts ...EventOpt) *Event {
-	ev := Event{EventType: et}
+func NewEvent(et EventName, opts ...EventOpt) *Event {
+	ev := Event{Name: et}
 	for _, opt := range opts {
 		opt(&ev)
 	}
@@ -126,15 +123,15 @@ func EvNext(nev *Event) EventOpt {
 	return fn
 }
 
-// EventType is a unique name used to identify events. It is used both for
+// Name is a unique name used to identify events. It is used both for
 // creating processes and also for routing messages to the correct process.
-type EventType string
+type EventName string
 
 // The main Root process. By default the root process don't have an ETFunc
 // registered with it to handle the ETRoot eventtype, but one can be created
 // with the normal ETFunc function signature, and defined when creating a
 // new root process.
-const ETRoot EventType = "ETRoot"
+const ETRoot EventName = "ETRoot"
 
 // Function type describing the signature of a function that is to be used
 // when creating a new process.

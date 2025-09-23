@@ -18,7 +18,8 @@ package actress
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"unsafe"
 )
 
@@ -26,11 +27,11 @@ import (
 // who belongs to what event, and also a map of the started
 // processes.
 type errorProcesses struct {
-	procMap map[EventType]*Process
+	procMap map[EventName]*Process
 }
 
 // // Delete an Event and it's process from the processes map.
-// func (p *processes) delete(et EventType, proc *Process) {
+// func (p *processes) delete(et Name, proc *Process) {
 // 	p.mu.Lock()
 // 	defer p.mu.Unlock()
 // 	p.procMap[et].cancel()
@@ -38,7 +39,7 @@ type errorProcesses struct {
 // }
 
 // Checks if the event is defined in the processes map, and returns true if it is.
-func (p *errorProcesses) IsEventDefined(ev EventType) bool {
+func (p *errorProcesses) IsEventDefined(ev EventName) bool {
 	if _, ok := p.procMap[ev]; !ok {
 		return false
 	}
@@ -49,13 +50,13 @@ func (p *errorProcesses) IsEventDefined(ev EventType) bool {
 // Prepare and return a new *processes structure.
 func newErrorProcesses() *errorProcesses {
 	p := errorProcesses{
-		procMap: make(map[EventType]*Process),
+		procMap: make(map[EventName]*Process),
 	}
 	return &p
 }
 
 // Router for error events.
-const ERRouter EventType = "ERRouter"
+const ERRouter EventName = "ERRouter"
 
 // Process function for routing and handling events.
 func erRouterFn(ctx context.Context, p *Process) func() {
@@ -73,15 +74,16 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 				if e.NextEvent != nil {
 					// Keep the information about the current event, so we are able to check for things
 					// like ackTimeout and what node to reply back to if ack should be given.
-					e.NextEvent.PreviousEvent = CopyEventFields(e)
+					e.NextEvent.PreviousEvent = CopyEventFields(&e)
 				}
 
 				eventNr++
 				e.Nr = eventNr
 
-				inCh := p.ErrorProcesses.procMap[e.EventType].InCh
+				inCh := p.ErrorProcesses.procMap[e.Name].InCh
 
-				fmt.Printf("DEBUG: Routing event, %v, node: %v, eventType: %v, .Inch: %v\n", p.Event, p.Config.NodeName, e.EventType, inCh)
+				// TODO: Make this one into a debug event.
+				// fmt.Printf("DEBUG: Routing event, %v, node: %v, name: %v, .Inch: %v\n", p.Event, p.Config.NodeName, e.Name, inCh)
 				inCh <- e
 
 			case <-p.Ctx.Done():
@@ -89,9 +91,10 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 				// handling is down. Maybe add a timeout if blocking to long,
 				// and then send elsewhere if it becomes a problem.
 				p.AddEvent(Event{
-					EventType: ERLog,
-					EventKind: EventKindError,
-					Err:       fmt.Errorf("info: got ctx.Done"),
+					Name:        ERLog,
+					Kind:        KindError,
+					Instruction: InstructionError,
+					Err:         fmt.Errorf("info: got ctx.Done"),
 				})
 			}
 		}
@@ -100,9 +103,19 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-// Log errors.
-const ERLog EventType = "ERLog"
+// Instructions for error logging.
+const InstructionError Instruction = "InstructionError"
+const InstructionInfo Instruction = "InstructionInfo"
+const InstructionDebug Instruction = "InstructionDebug"
+const InstructionFatal Instruction = "InstructionFatal"
 
+// Log errors.
+const ERLog EventName = "ERLog"
+
+// Will log errors to the console based on the Instruction field of the event.
+//
+// NB: The "none" is handled in the AddEvent function, to drop the event as
+// early as possible, instead of sending it all the way to be dropped here.
 func erLogFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		defer p.Stop()
@@ -111,32 +124,20 @@ func erLogFn(ctx context.Context, p *Process) func() {
 			select {
 			case er := <-p.InCh:
 
-				go func() {
-					log.Printf("error for logging received: %v\n", er.Err)
-				}()
-			case <-p.Ctx.Done():
-				return
-			}
-		}
-	}
+				switch er.Instruction {
+				case InstructionError:
+					slog.Error("", "msg", er.Err)
+				case InstructionInfo:
+					slog.Info("", "msg", er.Err)
+				case InstructionDebug:
+					slog.Debug("", "msg", er.Err)
+				case InstructionFatal:
+					slog.Error("", "msg", er.Err)
+					os.Exit(1)
+				default:
+					slog.Error("default", "msg", er.Err)
+				}
 
-	return fn
-}
-
-// Log debug errors.
-const ERDebug EventType = "ERDebug"
-
-func erDebugFn(ctx context.Context, p *Process) func() {
-	fn := func() {
-		defer p.Stop()
-
-		for {
-			select {
-			case er := <-p.InCh:
-
-				go func() {
-					log.Printf("error for debug logging received: %v\n", er.Err)
-				}()
 			case <-p.Ctx.Done():
 				return
 			}
@@ -147,30 +148,7 @@ func erDebugFn(ctx context.Context, p *Process) func() {
 }
 
 // Log and exit system.
-const ERFatal EventType = "ERFatal"
-
-func erFatalFn(ctx context.Context, p *Process) func() {
-	fn := func() {
-		defer p.Stop()
-
-		for {
-			select {
-			case er := <-p.InCh:
-
-				go func() {
-					log.Fatalf("error for fatal logging received: %v\n", er.Err)
-				}()
-			case <-p.Ctx.Done():
-				return
-			}
-		}
-	}
-
-	return fn
-}
-
-// Log and exit system.
-const ERTest EventType = "ERTest"
+const ERTest EventName = "ERTest"
 
 func erTestFn(ctx context.Context, p *Process) func() {
 	fn := func() {
@@ -193,8 +171,10 @@ func erTestFn(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-const ERNone EventType = "ERNone"
+// Will drop the event if it is an error event.
+const ERNone EventName = "ERNone"
 
+// Process function for dropping error events. Primarily used for testing.
 func erNoneFn(ctx context.Context, p *Process) func() {
 	use := func(p unsafe.Pointer) {}
 
