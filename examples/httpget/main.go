@@ -59,7 +59,6 @@ func main() {
 						}
 
 						p.AddEvent(actress.Event{Name: ETWriteToFile,
-							Kind: actress.KindStatic,
 							Data: b})
 					}()
 
@@ -100,12 +99,11 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, rootAct, ETWriteToFile, actress.KindStatic, WriteToFileFunc).Act()
-	actress.NewProcess(ctx, rootAct, ETHttpGet, actress.KindStatic, httpGetFunc).Act()
+	actress.NewProcess(ctx, rootAct, ETWriteToFile, WriteToFileFunc).Act()
+	actress.NewProcess(ctx, rootAct, ETHttpGet, httpGetFunc).Act()
 
 	rootAct.AddEvent(actress.Event{Name: ETHttpGet,
-		Kind: actress.KindStatic,
-		Cmd:  []string{"http://vg.no"}})
+		Cmd: []string{"http://vg.no"}})
 	// Receive and print the result.
 
 	time.Sleep(time.Second * 2)

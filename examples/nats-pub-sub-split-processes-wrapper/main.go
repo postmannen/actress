@@ -42,14 +42,12 @@ func wrapperETNatsSubscriber(conn *nats.Conn) ac.ETFunc {
 				sub, err := conn.QueueSubscribe(NatsSubject, NatsSubject, func(msg *nats.Msg) {
 					p.AddEvent(ac.Event{
 						Name: ac.ETPrint,
-						Kind: ac.KindStatic,
 						Data: []byte(fmt.Sprintf("* nats: got message on subject %v, payload: %v", msg.Subject, string(msg.Data))),
 					})
 				})
 				if err != nil {
 					p.AddEvent(ac.Event{
 						Name:        ac.ERLog,
-						Kind:        ac.KindError,
 						Instruction: ac.InstructionFatal,
 						Err:         fmt.Errorf("error: failed to nats.QueueSubscribe: %v", err)})
 				}
@@ -80,7 +78,6 @@ func wrapperETNatsPublisher(conn *nats.Conn) ac.ETFunc {
 						err := conn.Publish(ev.Cmd[0], ev.Data)
 						if err != nil {
 							p.AddEvent(ac.Event{Name: ac.ERLog,
-								Kind:        ac.KindError,
 								Instruction: ac.InstructionFatal,
 								Err:         fmt.Errorf("error: failed to nats.Publish: %v", err)})
 						}
@@ -112,7 +109,6 @@ func main() {
 	// Start up a Nats-server using the ETOsCmd EventType.
 	rootAct.AddEvent(ac.Event{
 		Name:      ac.ETOsCmd,
-		Kind:      ac.KindStatic,
 		Cmd:       []string{"/bin/bash", "-c", "docker run --rm -p 4222:4222 -i nats:latest"},
 		NextEvent: &ac.Event{Name: ac.ETPrint}})
 
@@ -132,12 +128,12 @@ func main() {
 	defer conn.Close()
 
 	// Create a nats sub process.
-	err = ac.NewProcess(ctx, rootAct, ETNatsSub, ac.KindStatic, wrapperETNatsSubscriber(conn)).Act()
+	err = ac.NewProcess(ctx, rootAct, ETNatsSub, wrapperETNatsSubscriber(conn)).Act()
 	if err != nil {
 		log.Fatal(err)
 	}
 	// Create a nats pub process.
-	err = ac.NewProcess(ctx, rootAct, ETNatsPub, ac.KindStatic, wrapperETNatsPublisher(conn)).Act()
+	err = ac.NewProcess(ctx, rootAct, ETNatsPub, wrapperETNatsPublisher(conn)).Act()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -148,7 +144,6 @@ func main() {
 		time.Sleep(time.Second * 2)
 		rootAct.AddEvent(ac.Event{
 			Name: ETNatsPub,
-			Kind: ac.KindStatic,
 			Cmd:  []string{NatsSubject},
 			Data: []byte(fmt.Sprintf("some data that was put in here: %v", nr)),
 		})

@@ -20,16 +20,16 @@ func TestECRouter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	NewProcess(ctx, rootp, ETTest, KindStatic, etTestfn(testCh)).Act()
-	NewProcess(ctx, rootp, ECGeneralDelivery, KindCustom, ecGeneralDeliveryFn).Act()
+	NewProcess(ctx, rootp, ETTest, ETTestfn(testCh)).Act()
+	NewProcess(ctx, rootp, ECGeneralDelivery, ecGeneralDeliveryFn).Act()
 
 	testStr := "some custom data"
 
 	rootp.AddEvent(Event{
-		Name:      ECGeneralDelivery,
-		Kind:      KindCustom,
+		Name: ECGeneralDelivery,
+
 		Data:      []byte(testStr),
-		NextEvent: &Event{Name: ETTest, Kind: KindStatic},
+		NextEvent: &Event{Name: ETTest},
 	})
 
 	select {

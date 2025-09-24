@@ -59,8 +59,8 @@ func esRouterFn(ctx context.Context, p *Process) func() {
 				if !ok {
 					p.AddEvent(Event{Name: ERLog,
 						Instruction: InstructionFatal,
-						Kind:        KindError,
-						Err:         fmt.Errorf("etRouter: on %v found no process registered for the event type : %v", p.Config.NodeName, ev.Name)})
+
+						Err: fmt.Errorf("etRouter: on %v found no process registered for the event type : %v", p.Config.NodeName, ev.Name)})
 				}
 
 				// // Process was registered. Deliver the event to the process InCh.
@@ -71,8 +71,8 @@ func esRouterFn(ctx context.Context, p *Process) func() {
 
 				p.AddEvent(Event{Name: ERLog,
 					Instruction: InstructionDebug,
-					Kind:        KindError,
-					Err:         fmt.Errorf("esRouterFn on %v, Routing event, %v, node: %v, name: %v, .Inch: %v", p.Config.NodeName, p.Event, p.Config.NodeName, ev.Name, inCh)})
+
+					Err: fmt.Errorf("esRouterFn on %v, Routing event, %v, node: %v, name: %v, .Inch: %v", p.Config.NodeName, p.Event, p.Config.NodeName, ev.Name, inCh)})
 
 				inCh <- ev
 
@@ -80,8 +80,8 @@ func esRouterFn(ctx context.Context, p *Process) func() {
 				p.AddEvent(Event{
 					Name:        ERLog,
 					Instruction: InstructionInfo,
-					Kind:        KindError,
-					Err:         fmt.Errorf("info: got ctx.Done"),
+
+					Err: fmt.Errorf("info: got ctx.Done"),
 				})
 
 				return
@@ -106,10 +106,10 @@ const InstructionESProcessesGetAll Instruction = "InstructionESProcessesGetAll"
 
 type esProcessesMapDataIn struct {
 	Name EventName
-	Kind Kind
 }
 
-type ESProcessesMap map[EventName]Kind
+// TODO: Figure out what the value should be here after we have removed the Kind type.
+type ESProcessesMap map[EventName]string
 
 // ETFunc for handling information about the currently running processes in the local Actress system.
 func esProcessesFn() ETFunc {
@@ -132,19 +132,20 @@ func esProcessesFn() ETFunc {
 						err := cbor.Unmarshal(ev.Data, &md)
 						if err != nil {
 							p.AddEvent(Event{
-								Name:        ERLog,
-								Kind:        KindError,
+								Name: ERLog,
+
 								Instruction: InstructionFatal,
 								Err:         fmt.Errorf("failed to unmarshal esProcesses map in data: %v", err),
 							})
 						}
 
-						processMap[md.Name] = md.Kind
+						// TODO: Figure out what the value should be here after we have removed the Kind type.
+						processMap[md.Name] = string(md.Name)
 
 						p.AddEvent(Event{Name: ERLog,
 							Instruction: InstructionDebug,
-							Kind:        KindError,
-							Err:         fmt.Errorf("esProcessesfn on %v, processesMap: %+v", p.Config.NodeName, processMap)})
+
+							Err: fmt.Errorf("esProcessesfn on %v, processesMap: %+v", p.Config.NodeName, processMap)})
 
 						// Nothing to output are produced so we just add for the .NextEvent if defined.
 						if ev.NextEvent != nil {
@@ -157,8 +158,8 @@ func esProcessesFn() ETFunc {
 						err := cbor.Unmarshal(ev.Data, &md)
 						if err != nil {
 							p.AddEvent(Event{
-								Name:        ERLog,
-								Kind:        KindError,
+								Name: ERLog,
+
 								Instruction: InstructionFatal,
 								Err:         fmt.Errorf("failed to unmarshal esProcesses map in data: %v", err),
 							})
@@ -176,8 +177,8 @@ func esProcessesFn() ETFunc {
 						b, err := cbor.Marshal(processMap)
 						if err != nil {
 							p.AddEvent(Event{
-								Name:        ERLog,
-								Kind:        KindError,
+								Name: ERLog,
+
 								Instruction: InstructionFatal,
 								Err:         fmt.Errorf("failed to marshal esProcesses for push all: %v", err),
 							})
@@ -194,15 +195,15 @@ func esProcessesFn() ETFunc {
 						p.AddEvent(Event{
 							Name:        ERLog,
 							Instruction: InstructionFatal,
-							Kind:        KindError,
-							Err:         fmt.Errorf("esProcesses: not a defined instruction: %v", ev.Instruction),
+
+							Err: fmt.Errorf("esProcesses: not a defined instruction: %v", ev.Instruction),
 						})
 					}
 
 				case <-p.Ctx.Done():
 					p.AddEvent(Event{
-						Name:        ERLog,
-						Kind:        KindError,
+						Name: ERLog,
+
 						Instruction: InstructionInfo,
 						Err:         fmt.Errorf("info: got ctx.Done"),
 					})

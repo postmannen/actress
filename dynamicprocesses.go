@@ -78,8 +78,8 @@ func newDynamicProcesses() *dynamicProcesses {
 
 // Will create and return a new UUID.
 func NewUUID() string {
-	u := uuid.New()
-	return u.String()
+	u := fmt.Sprintf("ED-%v", uuid.New())
+	return u
 }
 
 // ------------------------------------------------------------------------------
@@ -130,7 +130,7 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 
 							if !ok {
 								p.AddEvent(Event{Name: ERLog,
-									Kind:        KindError,
+
 									Instruction: InstructionError,
 									Err:         fmt.Errorf("edRouter: on %v found no process registered for the event type : %v, ev.DstNode: %v", p.Config.NodeName, ev.Name, ev.DstNode)})
 								// TODO: Is it possible to figure out a better way to do this, than waiting and retrying?
@@ -162,15 +162,15 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 
 				p.AddEvent(Event{Name: ERLog,
 					Instruction: InstructionDebug,
-					Kind:        KindError,
-					Err:         fmt.Errorf("edRouterFn on %v, Routing event, %v, node: %v, name: %v, .Inch: %v", p.Config.NodeName, p.Event, p.Config.NodeName, ev.Name, inCh)})
+
+					Err: fmt.Errorf("edRouterFn on %v, Routing event, %v, node: %v, name: %v, .Inch: %v", p.Config.NodeName, p.Event, p.Config.NodeName, ev.Name, inCh)})
 
 				inCh <- ev
 
 			case <-p.Ctx.Done():
 				p.AddEvent(Event{
-					Name:        ERLog,
-					Kind:        KindError,
+					Name: ERLog,
+
 					Instruction: InstructionError,
 					Err:         fmt.Errorf("info: got ctx.Done"),
 				})

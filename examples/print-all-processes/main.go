@@ -40,10 +40,9 @@ func main() {
 	}
 
 	rootAct.AddEvent(actress.Event{Name: actress.ETPidGetAll,
-		Kind: actress.KindStatic,
 		NextEvent: &actress.Event{
 			Name: actress.ETTestCh,
-			Kind: actress.KindStatic},
+		},
 	},
 	)
 

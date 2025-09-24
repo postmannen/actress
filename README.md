@@ -2,7 +2,7 @@
 
 A Concurrent Actor framework written in Go.
 
-**NB: This is still in the idea phase, so concepts are being tested out and things might/will change rapidly.
+**NB: This is still in the idea phase, so concepts are being tested out and things might/will change rapidly. 
 <u>Expect breaking changes between commits</u>**.
 
 ## Overview
@@ -108,7 +108,7 @@ func main() {
                     // Pass on the processing to the next process, and use the NextEvent we have specified in main
                     // for the Name, and add the result of ToUpper to the data field.
                     p.AddEvent(actress.Event{Name: ev.NextEvent.Name,
-                        Kind: ev.NextEvent.Kind,
+                        
                         Data:      []byte(upper)})
                 case <-ctx.Done():
                     return
@@ -130,7 +130,7 @@ func main() {
 
                     // Also create an informational error message.
                     p.AddEvent(actress.Event{Name: actress.ERDebug,
-                        Kind: actress.KindError,
+                        
                         Err:       fmt.Errorf("info: done with the acting")})
 
                 case <-ctx.Done():
@@ -143,17 +143,17 @@ func main() {
 
     // Register the event names and event function as processes,
     // and start them with the Act() method.
-    actress.NewProcess(ctx, rootAct, ETTest1, actress.KindStatic, test1Func).Act()
-    actress.NewProcess(ctx, rootAct, ETTest2, actress.KindStatic, test2Func).Act()
+    actress.NewProcess(ctx, rootAct, ETTest1,  test1Func).Act()
+    actress.NewProcess(ctx, rootAct, ETTest2,  test2Func).Act()
 
     // Pass in an event destined for an ETTest1 Name process, and also specify
     // the next event to be used when passing the result on from ETTest1 to the next
     // process which here is ETTest2.
     rootAct.AddEvent(actress.Event{Name: ETTest1,
-        Kind: actress.KindStatic,
+        
         Data:      []byte("test"),
         NextEvent: &actress.Event{Name: ETTest2,
-            Kind: actress.KindStatic},
+            
     },
     )
 

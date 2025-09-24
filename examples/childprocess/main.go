@@ -43,7 +43,6 @@ func main() {
 
 									// Also create an informational error message.
 									p.ErrorEventCh <- actress.Event{Name: actress.ERLog,
-										Kind:        actress.KindError,
 										Instruction: actress.InstructionDebug,
 										Err:         fmt.Errorf("info: done with the acting")}
 
@@ -55,7 +54,7 @@ func main() {
 
 						return fn
 					}
-					actress.NewProcess(ctx, p, ETTest2, actress.KindStatic, test2Func).Act()
+					actress.NewProcess(ctx, p, ETTest2, test2Func).Act()
 
 					upper := strings.ToUpper(string(result.Data))
 					p.StaticEventCh <- actress.Event{Name: ETTest2, Data: []byte(upper)}
@@ -70,7 +69,7 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, rootAct, ETTest1, actress.KindStatic, test1Func).Act()
+	actress.NewProcess(ctx, rootAct, ETTest1, test1Func).Act()
 
 	// Start all the registered actors.
 	err := rootAct.Act()
@@ -82,7 +81,6 @@ func main() {
 	// registered for the ETTest1 EventType, and add "test" to the
 	// data field of the event.
 	rootAct.AddEvent(actress.Event{Name: ETTest1,
-		Kind: actress.KindStatic,
 		Data: []byte("test")})
 	// Receive and print the result.
 	fmt.Printf("The result: %v\n", <-testCh)

@@ -91,8 +91,8 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 				// handling is down. Maybe add a timeout if blocking to long,
 				// and then send elsewhere if it becomes a problem.
 				p.AddEvent(Event{
-					Name:        ERLog,
-					Kind:        KindError,
+					Name: ERLog,
+
 					Instruction: InstructionError,
 					Err:         fmt.Errorf("info: got ctx.Done"),
 				})

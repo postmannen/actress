@@ -38,8 +38,7 @@ func etNatsClientFunc(ctx context.Context, p *ac.Process) func() {
 		)
 		if err != nil {
 			p.AddEvent(ac.Event{Name: ac.ERLog,
-				Kind: ac.KindError,
-				Err:  fmt.Errorf("error: nats.Connect failed, %vn", err)})
+				Err: fmt.Errorf("error: nats.Connect failed, %vn", err)})
 
 		}
 		defer conn.Close()
@@ -49,14 +48,12 @@ func etNatsClientFunc(ctx context.Context, p *ac.Process) func() {
 			sub, err := conn.QueueSubscribe(NatsSubject, NatsSubject, func(msg *nats.Msg) {
 				p.AddEvent(ac.Event{
 					Name: ac.ETPrint,
-					Kind: ac.KindStatic,
 					Data: []byte(fmt.Sprintf("* nats: got message on subject %v, payload: %v", msg.Subject, string(msg.Data))),
 				})
 			})
 			if err != nil {
 				p.AddEvent(ac.Event{
 					Name: ac.ERLog,
-					Kind: ac.KindError,
 					Err:  fmt.Errorf("error: failed to nats.QueueSubscribe: %v", err)})
 			}
 			defer sub.Unsubscribe()
@@ -73,8 +70,7 @@ func etNatsClientFunc(ctx context.Context, p *ac.Process) func() {
 					err := conn.Publish(ev.Cmd[0], ev.Data)
 					if err != nil {
 						p.AddEvent(ac.Event{Name: ac.ERLog,
-							Kind: ac.KindError,
-							Err:  fmt.Errorf("error: failed to nats.Publish: %v", err)})
+							Err: fmt.Errorf("error: failed to nats.Publish: %v", err)})
 					}
 				}()
 			case <-ctx.Done():
@@ -101,17 +97,16 @@ func main() {
 
 	// Start up a Nats-server using the ETOsCmd EventType.
 	rootAct.AddEvent(ac.Event{
-		Name: ac.ETOsCmd,
-		Kind: ac.KindStatic,
-		Cmd:  []string{"/bin/bash", "-c", "docker run --rm -p 4222:4222 -i nats:latest"},
-		NextEvent: &ac.Event{Name: ac.ETPrint,
-			Kind: ac.KindStatic}})
+		Name:      ac.ETOsCmd,
+		Cmd:       []string{"/bin/bash", "-c", "docker run --rm -p 4222:4222 -i nats:latest"},
+		NextEvent: &ac.Event{Name: ac.ETPrint},
+	})
 
 	// Wait a second so the nats-server is started before we connect the client.
 	time.Sleep(time.Second * 2)
 
 	// Create a nats client process.
-	err = ac.NewProcess(ctx, rootAct, ETNatsClient, ac.KindStatic, etNatsClientFunc).Act()
+	err = ac.NewProcess(ctx, rootAct, ETNatsClient, etNatsClientFunc).Act()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -121,7 +116,6 @@ func main() {
 	for {
 		rootAct.AddEvent(ac.Event{
 			Name: ETNatsClient,
-			Kind: ac.KindStatic,
 			Cmd:  []string{NatsSubject},
 			Data: []byte(fmt.Sprintf("some data that was put in here: %v", nr)),
 		})

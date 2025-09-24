@@ -40,9 +40,6 @@ type Event struct {
 	Nr int
 	// Name is a unique name to identify the type of the event.
 	Name EventName `json:"name" yaml:"name" cbor:"name"`
-	// Kind is a more general way to describe the event that can
-	// be used to destinguish if it is static, error or dynamic event.
-	Kind Kind `json:"kind" yaml:"kind" cbor:"kind"`
 	// Cmd is usually used for giving instructions or parameters for
 	// what an event shall do.
 	Cmd []string `json:"cmd" yaml:"cmd" cbor:"cmd"`
@@ -74,11 +71,6 @@ type Event struct {
 
 type Instruction string
 
-type Kind string
-
-const KindStatic Kind = "KindStatic"
-const KindError Kind = "KindError"
-
 // NewDynProcess will prepare and return a *Process. It will copy
 // channels and map structures from the root process.
 // The purpose of dynamic processes is to have short lived processes
@@ -86,9 +78,6 @@ const KindError Kind = "KindError"
 // The only difference between a process and a dynamic process are that
 // the dynamic processes have a mutex in processes map DynamicProcesses so
 // we also can delete the processes when they are no longer needed.
-const KindDynamic Kind = "KindDynamic"
-const KindCustom Kind = "KindCustom"
-const KindSupervisor Kind = "KindSupervisor"
 
 type Node string
 

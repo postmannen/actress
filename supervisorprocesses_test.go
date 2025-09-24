@@ -21,12 +21,11 @@ func TestESProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	NewProcess(ctx, rootp, ETTest, KindStatic, etTestfn(testCh)).Act()
+	NewProcess(ctx, rootp, ETTest, ETTestfn(testCh)).Act()
 	// NewProcess(ctx, rootp, ESProcesses, KindSupervisor, esProcessesFn()).Act()
 
 	md := esProcessesMapDataIn{
 		Name: "TestType1",
-		Kind: "Kind1",
 	}
 
 	// ---------- Add item to the esprocesses map
@@ -37,11 +36,11 @@ func TestESProcesses(t *testing.T) {
 	}
 
 	rootp.AddEvent(Event{
-		Name:        ESProcesses,
-		Kind:        KindSupervisor,
+		Name: ESProcesses,
+
 		Instruction: InstructionESProcessesAdd,
 		Data:        b,
-		NextEvent:   &Event{Name: ETTest, Kind: KindStatic},
+		NextEvent:   &Event{Name: ETTest},
 	})
 
 	// Wait for the the reply back, which are the ETTest .NextEvent
@@ -54,10 +53,10 @@ func TestESProcesses(t *testing.T) {
 	// ---------- Get item to the esprocesses map
 
 	rootp.AddEvent(Event{
-		Name:        ESProcesses,
-		Kind:        KindSupervisor,
+		Name: ESProcesses,
+
 		Instruction: InstructionESProcessesGetAll,
-		NextEvent:   &Event{Name: ETTest, Kind: KindStatic},
+		NextEvent:   &Event{Name: ETTest},
 	})
 
 	// Wait for the the reply back, which are the ETTest .NextEvent
@@ -69,7 +68,8 @@ func TestESProcesses(t *testing.T) {
 			t.Fatalf("error: failed to unmarshal process map: %v", err)
 		}
 
-		if pm["TestType1"] != "Kind1" {
+		// TODO: FIX THIS TEST WHEN WE HAVE REMOVED THE KIND TYPE.
+		if pm["TestType1"] != "TestType1" {
 			t.Fatalf("The received map did not contain the expected value %+v\n", pm)
 		}
 
@@ -83,11 +83,11 @@ func TestESProcesses(t *testing.T) {
 	// ---------- Delete item from the esprocesses map
 
 	rootp.AddEvent(Event{
-		Name:        ESProcesses,
-		Kind:        KindSupervisor,
+		Name: ESProcesses,
+
 		Instruction: InstructionESProcessesDelete,
 		Data:        b,
-		NextEvent:   &Event{Name: ETTest, Kind: KindStatic},
+		NextEvent:   &Event{Name: ETTest},
 	})
 
 	// Wait for the the reply back, which are the ETTest .NextEvent

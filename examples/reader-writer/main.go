@@ -97,9 +97,7 @@ func main() {
 				// set so the reply event will be sent back to us. The Data field
 				// will be set and handled by the Write method when called.
 				erw := NewEventRW(p, &actress.Event{Name: ETEventProcessor,
-					Kind: actress.KindStatic,
-					NextEvent: &actress.Event{Name: ETEventCreator,
-						Kind: actress.KindStatic}})
+					NextEvent: &actress.Event{Name: ETEventCreator}})
 
 				buf := bytes.NewBuffer([]byte{})
 				str := fmt.Sprintf("some data for event nr: %v", counter)
@@ -131,8 +129,8 @@ func main() {
 	}
 
 	// Register the event type and attach a function to it.
-	actress.NewProcess(ctx, rootAct, ETEventProcessor, actress.KindStatic, etEventProcessorFn).Act()
-	actress.NewProcess(ctx, rootAct, ETEventCreator, actress.KindStatic, etEventCreatorFn).Act()
+	actress.NewProcess(ctx, rootAct, ETEventProcessor, etEventProcessorFn).Act()
+	actress.NewProcess(ctx, rootAct, ETEventCreator, etEventCreatorFn).Act()
 
 	<-ctx.Done()
 }
