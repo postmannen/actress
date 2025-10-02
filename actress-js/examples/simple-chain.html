@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Actress-JS Simple Chain Example</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
+            margin: 10px auto;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        #output {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            margin-top: 20px;
+            min-height: 150px;
+            white-space: pre-wrap;
+        }
+        .step {
+            margin: 15px 0;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            background-color: #f7fafc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎭 Actress-JS Simple Chain</h1>
+        
+        <div class="step">
+            <h3>Process Chain Example</h3>
+            <p>This demonstrates how events can be chained together to create a workflow.</p>
+            <button onclick="runChainExample()">Start Process Chain</button>
+        </div>
+        
+        <div id="output">Ready to run process chain...</div>
+    </div>
+
+    <script type="module">
+        import { Actress, EventType, Event } from '../src/actress.js';
+
+        const output = document.getElementById('output');
+        
+        function log(message) {
+            output.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+
+        window.runChainExample = async function() {
+            output.textContent = '';
+            log('🚀 Starting process chain example...\n');
+
+            // Initialize actress system
+            const actress = new Actress();
+            await actress.init();
+            log('✅ Actress system initialized');
+
+            // Define event types for our chain
+            const ETAddPrefix = new EventType('ETAddPrefix');
+            const ETToUpperCase = new EventType('ETToUpperCase');
+            const ETAddSuffix = new EventType('ETAddSuffix');
+            const ETFinalize = new EventType('ETFinalize');
+
+            // Step 1: Add prefix
+            const prefixProcess = actress.addProcess(ETAddPrefix, async (event, process) => {
+                const result = `[PREFIX] ${event.data}`;
+                log(`📝 Step 1 - Added prefix: "${result}"`);
+                
+                if (event.nextEvent) {
+                    event.nextEvent.data = result;
+                    process.addEvent(event.nextEvent);
+                }
+            });
+
+            // Step 2: Convert to uppercase  
+            const upperProcess = actress.addProcess(ETToUpperCase, async (event, process) => {
+                const result = event.data.toUpperCase();
+                log(`🔤 Step 2 - Converted to uppercase: "${result}"`);
+                
+                if (event.nextEvent) {
+                    event.nextEvent.data = result;
+                    process.addEvent(event.nextEvent);
+                }
+            });
+
+            // Step 3: Add suffix
+            const suffixProcess = actress.addProcess(ETAddSuffix, async (event, process) => {
+                const result = `${event.data} [SUFFIX]`;
+                log(`📝 Step 3 - Added suffix: "${result}"`);
+                
+                if (event.nextEvent) {
+                    event.nextEvent.data = result;
+                    process.addEvent(event.nextEvent);
+                }
+            });
+
+            // Step 4: Finalize
+            const finalProcess = actress.addProcess(ETFinalize, async (event, process) => {
+                const result = `🎉 FINAL RESULT: ${event.data}`;
+                log(`✨ Step 4 - Finalization: "${result}"`);
+                log('\n🏁 Process chain completed successfully!');
+            });
+
+            // Start all processes
+            await prefixProcess.act();
+            await upperProcess.act();  
+            await suffixProcess.act();
+            await finalProcess.act();
+            
+            log('⚡ All processes started');
+
+            // Create the event chain
+            const initialEvent = new Event(ETAddPrefix, {
+                data: 'hello world',
+                nextEvent: new Event(ETToUpperCase, {
+                    nextEvent: new Event(ETAddSuffix, {
+                        nextEvent: new Event(ETFinalize)
+                    })
+                })
+            });
+
+            log('📤 Sending initial event through the chain...\n');
+            
+            // Start the chain
+            actress.sendEvent(initialEvent);
+        };
+
+        log('Click the button to see the event chain in action! 🎬');
+    </script>
+</body>
+</html> 

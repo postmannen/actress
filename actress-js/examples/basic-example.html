@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Actress-JS Basic Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .example-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fafafa;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #output {
+            background-color: #000;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            min-height: 200px;
+            margin-top: 20px;
+            overflow-y: auto;
+        }
+        .status {
+            background-color: #e7f3ff;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Actress-JS Basic Example</h1>
+        <p>This example demonstrates the basic usage of the Actress-JS actor framework, similar to the Go version.</p>
+        
+        <div class="example-section">
+            <h3>Two Actresses Example</h3>
+            <p>Creates two processes that work together - one converts text to uppercase, the other adds dots.</p>
+            <button onclick="runTwoActressesExample()">Run Two Actresses Example</button>
+        </div>
+        
+        <div class="example-section">
+            <h3>HTTP GET Example</h3>
+            <p>Demonstrates fetching data from an API and processing the result.</p>
+            <button onclick="runHttpGetExample()">Run HTTP GET Example</button>
+        </div>
+        
+        <div class="example-section">
+            <h3>Process Chain Example</h3>
+            <p>Shows event chaining with NextEvent for workflow execution.</p>
+            <button onclick="runProcessChainExample()">Run Process Chain Example</button>
+        </div>
+        
+        <div class="status">
+            <h4>System Status:</h4>
+            <div id="status">Not initialized</div>
+            <button onclick="updateStatus()">Update Status</button>
+        </div>
+        
+        <div id="output"></div>
+    </div>
+
+    <script type="module">
+        import { Actress, newEvent, EventType, Event, ETPrint, ERDebug } from '../src/actress.js';
+        import { httpGetProcessFn } from '../src/builtins.js';
+
+        // Global actress instance
+        let actress = null;
+        const output = document.getElementById('output');
+        const statusDiv = document.getElementById('status');
+
+        function log(message) {
+            output.innerHTML += message + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // Initialize the system
+        async function initActress() {
+            if (!actress) {
+                actress = new Actress();
+                await actress.init();
+                log('Actress system initialized');
+                updateStatus();
+            }
+        }
+
+        // Two actresses example (similar to the Go example)
+        window.runTwoActressesExample = async function() {
+            await initActress();
+            log('\n=== Running Two Actresses Example ===');
+            
+            // Define event types
+            const ETTest1 = new EventType('ETTest1');
+            const ETTest2 = new EventType('ETTest2');
+            
+            // First process: converts to uppercase
+            const test1Process = actress.addProcess(ETTest1, async (event, process) => {
+                const upper = event.data.toUpperCase();
+                log(`Process 1: Converting "${event.data}" to "${upper}"`);
+                
+                // Pass to next process if NextEvent is specified
+                if (event.nextEvent) {
+                    event.nextEvent.data = upper;
+                    process.addEvent(event.nextEvent);
+                }
+            });
+            
+            // Second process: adds dots
+            const test2Process = actress.addProcess(ETTest2, async (event, process) => {
+                const result = event.data + '...';
+                log(`Process 2: Adding dots: "${result}"`);
+                
+                // Send debug message
+                process.addError(new Event(ERDebug, {
+                    error: new Error('info: done with the acting')
+                }));
+            });
+            
+            // Start the processes
+            await test1Process.act();
+            await test2Process.act();
+            
+            // Send event with NextEvent chain
+            const initialEvent = new Event(ETTest1, {
+                data: 'hello world',
+                nextEvent: new Event(ETTest2)
+            });
+            
+            actress.sendEvent(initialEvent);
+            log('Event sent to process chain');
+        };
+
+        // HTTP GET example
+        window.runHttpGetExample = async function() {
+            await initActress();
+            log('\n=== Running HTTP GET Example ===');
+            
+            const ETHttpGet = new EventType('ETHttpGet');
+            
+            // HTTP GET process
+            const httpProcess = actress.addProcess(ETHttpGet, httpGetProcessFn);
+            await httpProcess.act();
+            
+            // Send HTTP GET request
+            const httpEvent = new Event(ETHttpGet, {
+                cmd: ['https://api.github.com/zen'],
+                nextEvent: new Event(ETPrint)
+            });
+            
+            actress.sendEvent(httpEvent);
+            log('HTTP GET request sent');
+        };
+
+        // Process chain example
+        window.runProcessChainExample = async function() {
+            await initActress();
+            log('\n=== Running Process Chain Example ===');
+            
+            const ETStep1 = new EventType('ETStep1');
+            const ETStep2 = new EventType('ETStep2');
+            const ETStep3 = new EventType('ETStep3');
+            
+            // Step 1: Add prefix
+            const step1Process = actress.addProcess(ETStep1, async (event, process) => {
+                const result = 'Step1: ' + event.data;
+                log(`Step 1 processed: ${result}`);
+                
+                if (event.nextEvent) {
+                    event.nextEvent.data = result;
+                    process.addEvent(event.nextEvent);
+                }
+            });
+            
+            // Step 2: Add middle
+            const step2Process = actress.addProcess(ETStep2, async (event, process) => {
+                const result = event.data + ' -> Step2';
+                log(`Step 2 processed: ${result}`);
+                
+                if (event.nextEvent) {
+                    event.nextEvent.data = result;
+                    process.addEvent(event.nextEvent);
+                }
+            });
+            
+            // Step 3: Add suffix
+            const step3Process = actress.addProcess(ETStep3, async (event, process) => {
+                const result = event.data + ' -> Step3: Complete!';
+                log(`Step 3 processed: ${result}`);
+            });
+            
+            // Start processes
+            await step1Process.act();
+            await step2Process.act();
+            await step3Process.act();
+            
+            // Create chained event
+            const chainedEvent = new Event(ETStep1, {
+                data: 'Initial Data',
+                nextEvent: new Event(ETStep2, {
+                    nextEvent: new Event(ETStep3)
+                })
+            });
+            
+            actress.sendEvent(chainedEvent);
+            log('Chained event sent');
+        };
+
+        // Update status display
+        window.updateStatus = function() {
+            if (actress) {
+                const status = actress.getStatus();
+                statusDiv.innerHTML = `
+                    <strong>Initialized:</strong> ${status.initialized}<br>
+                    <strong>Running:</strong> ${status.isRunning}<br>
+                    <strong>Processes:</strong> ${status.processCount}<br>
+                    <strong>Dynamic Processes:</strong> ${status.dynProcessCount}<br>
+                    <strong>Error Processes:</strong> ${status.errProcessCount}
+                `;
+            } else {
+                statusDiv.innerHTML = 'Not initialized';
+            }
+        };
+
+        // Override console methods to also log to our output
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalDebug = console.debug;
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            log('LOG: ' + args.join(' '));
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            log('ERROR: ' + args.join(' '));
+        };
+        
+        console.debug = function(...args) {
+            originalDebug.apply(console, args);
+            log('DEBUG: ' + args.join(' '));
+        };
+
+        log('Actress-JS Basic Example loaded. Click buttons to run examples.');
+    </script>
+</body>
+</html> 
