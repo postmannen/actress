@@ -21,35 +21,36 @@ To initiate and trigger the execution of the process's function, we send events.
 
 ```Go
 type Event struct {
-    Nr int
-    // Name is a unique name to identify the type of the event.
-    Name EventName `json:"name" yaml:"name" cbor:"name"`
-    // Kind is a more general way to describe the event that can
-    // be used to destinguish if it is static, error or dynamic event.
-    Kind Kind `json:"kind" yaml:"kind" cbor:"kind"`
-    // Cmd is usually used for giving instructions or parameters for
-    // what an event shall do.
-    Cmd []string `json:"cmd" yaml:"cmd" cbor:"cmd"`
-    // Data usually carries the data from one process to the next. Example
-    // could be a file read on process1 is put in the Data field, and
-    // passed on to process2 to be unmarshaled.
-    Data []byte `json:"data" yaml:"data" cbor:"data"`
-    // Data to be transfered internally. Example is to send config directly via
-    // the channel between internal actors.
-    InternalCh chan chan []byte `json:"-" yaml:"-" cbor:"-"`
-    // Err is used for defining the error message when the event is used
-    // as an error event.
-    Err error `json:"error" yaml:"error" cbor:"error"`
-    // NextEvent defines a series of events to be executed like a workflow.
-    // The receiving process should check this field for what kind of event
-    // to create as the next step in the workflow.
-    NextEvent *Event `json:"nextEvent" yaml:"nextEvent" cbor:"nextEvent"`
-    // PreviousEvent allows for keeping information about the previous event if needed.
-    PreviousEvent *Event `json:"previousEvent" yaml:"previousEvent" cbor:"previousEvent"`
-    // Dst node.
-    DstNode Node `json:"dst" yaml:"dst" cbor:"dst"`
-    // Src node.
-    SrcNode Node `json:"src" yaml:"src" cbor:"src"`
+	Nr int
+	// Name is a unique name to identify the type of the event.
+	Name EventName `json:"name" yaml:"name" cbor:"name"`
+	// Cmd is usually used for giving instructions or parameters for
+	// what an event shall do.
+	Cmd []string `json:"cmd" yaml:"cmd" cbor:"cmd"`
+	// Instruction got the underlying type of string. This field can
+	// be used to give for example an instruction of a single word.
+	// For example in switch statements at the receiving actor, or other.
+	Instruction Instruction
+	// Data usually carries the data from one process to the next. Example
+	// could be a file read on process1 is put in the Data field, and
+	// passed on to process2 to be unmarshaled.
+	Data []byte `json:"data" yaml:"data" cbor:"data"`
+	// Data to be transfered internally. Example is to send config directly via
+	// the channel between internal actors.
+	InternalCh chan chan []byte `json:"-" yaml:"-" cbor:"-"`
+	// Err is used for defining the error message when the event is used
+	// as an error event.
+	Err error `json:"error" yaml:"error" cbor:"error"`
+	// NextEvent defines a series of events to be executed like a workflow.
+	// The receiving process should check this field for what kind of event
+	// to create as the next step in the workflow.
+	NextEvent *Event `json:"nextEvent" yaml:"nextEvent" cbor:"nextEvent"`
+	// PreviousEvent allows for keeping information about the previous event if needed.
+	PreviousEvent *Event `json:"previousEvent" yaml:"previousEvent" cbor:"previousEvent"`
+	// Dst node.
+	DstNode Node `json:"dstNode" yaml:"dstNode" cbor:"dstNode"`
+	// Src node.
+	SrcNode Node `json:"srcNode" yaml:"srcNode" cbor:"srcNode"`
 }
 ```
 
@@ -164,6 +165,50 @@ func main() {
 }
 ```
 
+## Remote delivery
+
+If the DstNode field of an event is set, the event can be sent to the remote node using the ETRemote process if an ETRemote process has been started, and a etRemoteFunc has been defined for it. If no value is set in the DstNode field, the event will be processed locally.
+
+The actress.ETRemote event type is already defined in the actress package, but no etRemoteFunc is defined for it. It is up to the programmer to define an etRemoteFunc and start the ETRemote process.
+
+### A high level overview of how registering and starting an ETRemote process works
+
+```go
+etRemoteFunc := func(ctx context.Context, p *actress.Process) func() {
+		fn := func() {
+			for {
+				select {
+				case ev := <-p.InCh:
+					// The event received here came here since an event was processed,
+                    // and a value was set in the DstNode field of the event.
+					//
+                    // We can now choose to do what we want with the event. The original
+                    // event is received in the InCh and put in the ev variable.
+                    //
+                    // The DstNode field holds the name of the remote node. We can then use
+                    // that as the topic if we want send the event to a remote node over MQTT.
+
+                    // ..write some code here that will marshal the event to example JSON,
+                    //  and send it via MQTT, and use the value defined
+                    // in the DstNode field as the topic.
+                    //
+                    // NB: If for example MQTT is chosen as the communication protocol, we will
+                    // also need to define an MQTT received Actress/Process that will be able
+                    // to receive the event on the remote node.
+                    
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+		return fn
+	}
+
+// Register the event name and event function as a process,
+// and start it with the Act() method.
+actress.NewProcess(ctx, rootAct, actress.ETRemote, etRemoteFunc).Act()
+```
+
 ## Details
 
 Short intro about the Events.
@@ -179,10 +224,12 @@ The even type is identified by the firs 2 letters of the event.Name:
 
 The reason for splitting them up are for **separation** and use of **mutex'es** , for example if the event routing logic hangs on static events, it will not affect the other event kinds, so we are able to for example send errors if any of the other routers are having trouble or have massive load.
 
+A router Actress/Process is defined for each of the event types.
+
 ### Where to use an actor process of a specific kind ?
 
-**Static processes**, should only be used for processes/actors defined at startup. Event lookups for finding the right actor **are not protected by a mutex**.  
-**Dynamic processes**, Can be used both for startup and runtime defined actors, but prefer static at startup unless you have a really good reason to not do it :). Event lookups for finding the right actor **are protected by a mutex**.
+**Static processes**, should be used for processes/actors defined at startup.
+**Dynamic processes**, Can be used both for startup and runtime defined actors, but prefer static at startup unless you have a really good reason to not do it :).
 **Error processes** For error logging and handling.
 **Supervisor processes** For control logic and information about the whole Actress system.
 
