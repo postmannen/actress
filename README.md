@@ -169,6 +169,10 @@ func main() {
 
 If the DstNode field of an event is set, the event can be sent to the remote node using the ETRemote process if an ETRemote process has been started, and a etRemoteFunc has been defined for it. If no value is set in the DstNode field, the event will be processed locally.
 
+How this works is that when the routing logic notices that the DstNode field is set, it will create a new event of type ETRemote, and put the original even in the NextEvent field of the new ETRemote event, and the event is added to the queue with the AddEvent method of the Actress. Tip, check the [NextEvent](#nextevent) section for more information about the NextEvent field.
+
+The ETRemote process will then receive the event, and we can take the original event that we find in the NextEvent field, use that, and send it to the remote node using the for example DstNode field as the topic.
+
 The actress.ETRemote event type is already defined in the actress package, but no etRemoteFunc is defined for it. It is up to the programmer to define an etRemoteFunc and start the ETRemote process.
 
 ### A high level overview of how registering and starting an ETRemote process works
@@ -181,9 +185,11 @@ etRemoteFunc := func(ctx context.Context, p *actress.Process) func() {
 				case ev := <-p.InCh:
 					// The event received here came here since an event was processed,
                     // and a value was set in the DstNode field of the event.
+                    // Also, when an event is received here, the type of event is ETRemote,
+                    // and the NextEvent field holds the original event that was
+                    // processed when it was decided to send it to a remote node.
 					//
-                    // We can now choose to do what we want with the event. The original
-                    // event is received in the InCh and put in the ev variable.
+                    // We can now take the NextEvent and choose to do what we want with the event.
                     //
                     // The DstNode field holds the name of the remote node. We can then use
                     // that as the topic if we want send the event to a remote node over MQTT.
@@ -193,7 +199,7 @@ etRemoteFunc := func(ctx context.Context, p *actress.Process) func() {
                     // in the DstNode field as the topic.
                     //
                     // NB: If for example MQTT is chosen as the communication protocol, we will
-                    // also need to define an MQTT received Actress/Process that will be able
+                    // also need to define an MQTT receiver Actress/Process that will be able
                     // to receive the event on the remote node.
                     
 				case <-ctx.Done():
@@ -207,6 +213,35 @@ etRemoteFunc := func(ctx context.Context, p *actress.Process) func() {
 // Register the event name and event function as a process,
 // and start it with the Act() method.
 actress.NewProcess(ctx, rootAct, actress.ETRemote, etRemoteFunc).Act()
+```
+
+And then what the general MQTT actreess for the receiving side would look like.
+
+```go
+
+// Define the event name for the MQTT receiver process.
+const ETMQTTReceiver actress.Name = "ETMQTTReceiver"
+
+etMQTTReceiverFunc := func(ctx context.Context, p *actress.Process) func() {
+		fn := func() {
+            go func() {
+                // The outline of how an MQTT receiver could be implemented.
+                // 1. Connect to MQTT broker.
+                // 2. Subscribe to topic.
+                // 3. Receive message.
+                // 4. Unmarshal message, to get the actress.Event.
+                // 5. Use the AddEvent() method to add the event to the queue
+                //    of messages to be handled
+            }()
+			<-ctx.Done():
+			return
+		}
+		return fn
+	}
+
+// Register the event name and event function as a process,
+// and start it with the Act() method.
+actress.NewProcess(ctx, rootAct, ETMQTTReceiver, etMQTTReceiverFunc).Act()
 ```
 
 ## Details
