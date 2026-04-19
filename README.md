@@ -14,7 +14,7 @@ The event can define what the next process to call is, and the next process will
 
 By passing the result of one actor in an event we can completely avoid shared state.
 
-### High level outline of how it works:
+### High level outline of how it works
 
 1. Define Processes with Event Types and Event Functions for two processes.
    - A, MetricReader, will read the metrics from some source(s).
@@ -35,15 +35,17 @@ A -> B
 A -> C
 
 Events can also be chained Like A -> C -> B.
-The difference then I that A's functions adds an event to C, and C adds an event to B.
+The difference then is that A's functions adds an event to C, and C adds an event to B.
 
 ### Processes
 
-A process are like a module capable of performing a specific task. A process is defined by an Event Name and an Event Function attached to each process. A process have an InCh for receiving events, and an AddEvent function for sending Events. The processes can themselves spawn new processes. Processes can also send Event messages to other processes.
+A process are like a module capable of performing a specific task. A process is defined by an Event Name and an Event Function attached to each process. A process have an InCh for receiving events, and an AddEvent function for sending Events.
+The processes can themselves spawn new processes.
+To communicate with other processes, a process can send Event messages to other processes.
 
 ### Sharing state
 
-Normally stat are shared by passing the state from one processes to the next as an event.
+Normally state are shared by passing the state from one processes to the next as an event.
 
 If needed, a process can also share state directly between the Process Functions if needed, by giving it a state variable or struct type that holds the state as an input argument to the event function.
 
@@ -64,7 +66,10 @@ func etGreet(c *Client) actress.ETFunc {
 
 ### Events
 
-To initiate and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as the communication between the processes. They can carry data, either with the result of something a process did to pass it on to the next process for further processing, instructions for what a process should do, or both. An event can also contain a chain of several events to create workflows of what do do and in what order by using the **NextEvent** feature (see examples for usage).
+To communicate with other processes, we send events. Each process has its own unique event name. Events are the way to communicate between the processes. They can carry data, either with the result of something a process did that is passed on to the next process for further processing.
+An event can also contain a chain of several events to create workflows of what do do and in what order by using the **NextEvent** feature (see examples for usage).
+
+The structure of an Event:
 
 ```Go
 type Event struct {
@@ -105,7 +110,7 @@ type Event struct {
 
 Event Functions holds the logic for what a process shall do when an event is received, and then what to do with the data the event carries. The Event functions are callback functions that are defined for a process when the process is created.
 
-The programmer can decide if the Process Function should depend on the input from the input channel of the process, or just continously do some work on it's own. For an event function to be triggered to work on events it should hold a **for** loop that listens on the Process `InCh` for new Events.
+The programmer can decide if the Process Function should depend on the input from the **in channel** of the process, or just continously do some work on it's own. For an event function to be triggered to work on events it should hold a **for** loop that listens on the Process's `InCh` for new Events.
 
 ### Examples
 
@@ -214,7 +219,7 @@ func main() {
 
 ## Remote delivery
 
-If the DstNode field of an event is set, the event can be sent to the remote node using the ETRemote process if an ETRemote process has been started, and a etRemoteFunc has been defined for it. If no value is set in the DstNode field, the event will be processed locally.
+If the DstNode field of an event is set, the event can be sent to the remote node set using the ETRemote process that process has been started, with a etRemoteFunc for how to do remote delivery. If no value is set in the DstNode field, the event will be processed locally.
 
 How this works is that when the routing logic notices that the DstNode field is set, it will create a new event of type ETRemote, put the original event in the NextEvent field of the new ETRemote event, and then the event is added to the queue with the AddEvent method of the Actress. Tip, check the [NextEvent](#nextevent) section for more information about the NextEvent field.
 
@@ -296,7 +301,7 @@ actress.NewProcess(ctx, rootAct, ETMQTTReceiver, etMQTTReceiverFunc).Act()
 Short intro about the Events.
 
 The events for all processes, both static, dynamic, error, and supervisor uses the same event type and structure.
-The even type is identified by the firs 2 letters of the event.Name:
+The event type is identified by the first 2 letters of the Event.Name:
 
 - ET, static events
 - ED, dynamic event
@@ -304,13 +309,13 @@ The even type is identified by the firs 2 letters of the event.Name:
 - EC, custom events
 - ES, supervisor events
 
-The reason for splitting them up are for **separation** and use of **mutex'es** , for example if the event routing logic hangs on static events, it will not affect the other event kinds, so we are able to for example send errors if any of the other routers are having trouble or have massive load.
+The reason for splitting them up are for **separation**. For example if the event routing logic hangs on static events, it will not affect the other event kinds, so we are able to for example send errors if any of the other routers are having trouble or have massive load.
 
 A router Actress/Process is defined for each of the event types.
 
 ### Where to use an actor process of a specific kind ?
 
-**Static processes**, should be used for processes/actors defined at startup.
+**Static processes**, normally used for processes/actors defined at startup.
 **Dynamic processes**, Can be used both for startup and runtime defined actors, but prefer static at startup unless you have a really good reason to not do it :).
 **Error processes** For error logging and handling.
 **Supervisor processes** For control logic and information about the whole Actress system.
@@ -325,6 +330,6 @@ p.AddEvent(Event{Name: Name("ETBleeping"), NextEvent: &Event{Name: ETPrint}})
 
 ## Dynamic Processes
 
-The purpose of dynamic processes is to have short lived processes that can be quickly started, and removed again when it's job is done. The only difference between a Static process and a Dynamic process are that the dynamic processes have a mutex in the DynamicProcesses map so that we can delete the processes when they are no longer needed at runtime withhout causing a datarace.
+The purpose of dynamic processes is to have short lived processes that can be quickly started, and removed again when it's job is done. Dynamic processes are not manually given a name, but automatically assigned an UUID to identify it.
 
-A typical example could be that there is a processes that needs to communicate in some other way with another process that cant be done with the current process's event channel. We can then spawn a dynamic process to take care of that. Check out the test and files in the examples directory. A process can spawn as many dynamic processes as it needs.
+A typical example could be that there is a processes that needs to communicate in some other way with another process that can't be done with the current process's event channel. We can then spawn a dynamic process to take care of that. Check out the test and files in the examples directory. A process can spawn as many dynamic processes as it needs.
