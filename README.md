@@ -2,63 +2,108 @@
 
 A Concurrent Actor framework written in Go.
 
-**NB: This is still in the idea phase, so concepts are being tested out and things might/will change rapidly. 
-<u>Expect breaking changes between commits</u>**.
+**NB: This is still in the idea phase, so concepts are being tested out and things might/will change rapidly**.
+
+**Expect breaking changes between commits**.
 
 ## Overview
 
-Create custom processes where what the processes do are either your own piece of code, or it can be a command called from the Operating system. The processes can communicate by sending events to pass the result from one processes to the next for further processing, or by chaining together process as workflows to create a series of Events that together will provide some end result.
+Create custom processes (actors, actresses), where the processes can communicate by sending events to pass the result from one processes to the next for further processing, or by chaining together process as workflows to create a series of Events that together will provide some end result.
+
+By passing the result of one actor in an event we can completely avoid shared state.
+
+High level outline of how it works:
+
+1. Define Processes with Event Types and Event Functions for two processes.
+   - A, MetricReader, will read the metrics from some source(s).
+   - B, MetricConsumer, will receive the metrics from the MetricReader, and present them in a dashboard.
+2. Start both processes.
+3. A metric of some kind are received or read at the MetricReader.
+4. The MetricReader will/can for example format the metric into a given structure.
+5. The MetricReader creates and adds an event queue to send to MetricConsumer, and attached the serialized data of the structure onto the event.
+6. The MetricConsumer process receives the event, extracts the data, and presents it in a dashboard.
+
+If we then figure out we need to do something more with the data before presented in the dashboard, like storing it into a database.
+
+1. Create a process for storing in database.
+    - C, DatabaseStorer.
+2. In A's event function, also add the creation of an event with the metrics data to be sent to the DatabaseStorer, so it becomes:
+
+A -> B
+A -> C
+
+Events can also be chained Like A -> C -> B.
+The difference then I that A's functions adds an event to C, and C adds an event to B.
 
 ### Processes
 
-A process are like a module capable of performing a specific tasks. The nature of the process is determined by an Name and a Function attached to each process. A process have an InCh for receiving events, and an AddEvent function for sending Events. The processes can themselves spawn new processes. Processes can also send Event messages to other processes.
+A process are like a module capable of performing a specific task. A process is defined by an Event Name and an Event Function attached to each process. A process have an InCh for receiving events, and an AddEvent function for sending Events. The processes can themselves spawn new processes. Processes can also send Event messages to other processes.
 
-A process can hold state within the Process Function.
+### Sharing state
+
+Normally stat are shared by passing the state from one processes to the next as an event.
+
+If needed, a process can also share state directly between the Process Functions if needed, by giving it a state variable or struct type that holds the state as an input argument to the event function.
+
+Example:
+
+```go
+// The 'c *Client' are defined in the Event Functions for both processes,
+// so both processes have access to the same memory area.
+
+func etHello(c *Client) actress.ETFunc {
+.......
+}
+
+func etGreet(c *Client) actress.ETFunc {
+.......
+}
+```
 
 ### Events
 
-To initiate and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as the communication within the system. They can carry data, either with the result of something a process did to pass it on to the next process for further processing, instructions for what a process should do, or both. An event can contain a chain of events to create workflows of what do do and in what order by using the NextEvent feature (see examples for usage).
+To initiate and trigger the execution of the process's function, we send events. Each process has its own unique event name. Events serve as the communication between the processes. They can carry data, either with the result of something a process did to pass it on to the next process for further processing, instructions for what a process should do, or both. An event can also contain a chain of several events to create workflows of what do do and in what order by using the **NextEvent** feature (see examples for usage).
 
 ```Go
 type Event struct {
-	Nr int
-	// Name is a unique name to identify the type of the event.
-	Name EventName `json:"name" yaml:"name" cbor:"name"`
-	// Cmd is usually used for giving instructions or parameters for
-	// what an event shall do.
-	Cmd []string `json:"cmd" yaml:"cmd" cbor:"cmd"`
-	// Instruction got the underlying type of string. This field can
-	// be used to give for example an instruction of a single word.
-	// For example in switch statements at the receiving actor, or other.
-	Instruction Instruction
-	// Data usually carries the data from one process to the next. Example
-	// could be a file read on process1 is put in the Data field, and
-	// passed on to process2 to be unmarshaled.
-	Data []byte `json:"data" yaml:"data" cbor:"data"`
-	// Data to be transfered internally. Example is to send config directly via
-	// the channel between internal actors.
-	InternalCh chan chan []byte `json:"-" yaml:"-" cbor:"-"`
-	// Err is used for defining the error message when the event is used
-	// as an error event.
-	Err error `json:"error" yaml:"error" cbor:"error"`
-	// NextEvent defines a series of events to be executed like a workflow.
-	// The receiving process should check this field for what kind of event
-	// to create as the next step in the workflow.
-	NextEvent *Event `json:"nextEvent" yaml:"nextEvent" cbor:"nextEvent"`
-	// PreviousEvent allows for keeping information about the previous event if needed.
-	PreviousEvent *Event `json:"previousEvent" yaml:"previousEvent" cbor:"previousEvent"`
-	// Dst node.
-	DstNode Node `json:"dstNode" yaml:"dstNode" cbor:"dstNode"`
-	// Src node.
-	SrcNode Node `json:"srcNode" yaml:"srcNode" cbor:"srcNode"`
+    Nr int
+    // Name is a unique name to identify the type of the event.
+    Name EventName `json:"name" yaml:"name" cbor:"name"`
+    // Cmd is usually used for giving instructions or parameters for
+    // what an event shall do.
+    Cmd []string `json:"cmd" yaml:"cmd" cbor:"cmd"`
+    // Instruction got the underlying type of string. This field can
+    // be used to give for example an instruction of a single word.
+    // For example in switch statements at the receiving actor, or other.
+    Instruction Instruction
+    // Data usually carries the data from one process to the next. Example
+    // could be a file read on process1 is put in the Data field, and
+    // passed on to process2 to be unmarshaled.
+    Data []byte `json:"data" yaml:"data" cbor:"data"`
+    // Data to be transfered internally. Example is to send config directly via
+    // the channel between internal actors.
+    InternalCh chan chan []byte `json:"-" yaml:"-" cbor:"-"`
+    // Err is used for defining the error message when the event is used
+    // as an error event.
+    Err error `json:"error" yaml:"error" cbor:"error"`
+    // NextEvent defines a series of events to be executed like a workflow.
+    // The receiving process should check this field for what kind of event
+    // to create as the next step in the workflow.
+    NextEvent *Event `json:"nextEvent" yaml:"nextEvent" cbor:"nextEvent"`
+    // PreviousEvent allows for keeping information about the previous event if needed.
+    PreviousEvent *Event `json:"previousEvent" yaml:"previousEvent" cbor:"previousEvent"`
+    // Dst node.
+    DstNode Node `json:"dstNode" yaml:"dstNode" cbor:"dstNode"`
+    // Src node.
+    SrcNode Node `json:"srcNode" yaml:"srcNode" cbor:"srcNode"`
 }
 ```
 
 ### Event Functions (ETFunc)
 
-Event Functions holds the logic for what a process shall do when an event is received, and what to do with the data the event carries. The Event functions are callback functions that are executed when a process is created.
+Event Functions holds the logic for what a process shall do when an event is received, and then what to do with the data the event carries. The Event functions are callback functions that are defined for a process when the process is created.
 
-The programmer can decide if the Process Function should depend on the input from the input channel of the process, or just continously do some work on it's own. For an event function to be triggered to work on events it should hold a **for** loop that listens on the Process InCh for new Events.
+The programmer can decide if the Process Function should depend on the input from the input channel of the process, or just continously do some work on it's own. For an event function to be triggered to work on events it should hold a **for** loop that listens on the Process `InCh` for new Events.
 
 ### Examples
 
@@ -169,9 +214,9 @@ func main() {
 
 If the DstNode field of an event is set, the event can be sent to the remote node using the ETRemote process if an ETRemote process has been started, and a etRemoteFunc has been defined for it. If no value is set in the DstNode field, the event will be processed locally.
 
-How this works is that when the routing logic notices that the DstNode field is set, it will create a new event of type ETRemote, and put the original even in the NextEvent field of the new ETRemote event, and the event is added to the queue with the AddEvent method of the Actress. Tip, check the [NextEvent](#nextevent) section for more information about the NextEvent field.
+How this works is that when the routing logic notices that the DstNode field is set, it will create a new event of type ETRemote, put the original event in the NextEvent field of the new ETRemote event, and then the event is added to the queue with the AddEvent method of the Actress. Tip, check the [NextEvent](#nextevent) section for more information about the NextEvent field.
 
-The ETRemote process will then receive the event, and we can take the original event that we find in the NextEvent field, use that, and send it to the remote node using the for example DstNode field as the topic.
+The local ETRemote process will then receive the event, and take the original event that we find in the NextEvent field, use that, and send it to the remote node using the for example DstNode field as the Subject if NATS is used.
 
 The actress.ETRemote event type is already defined in the actress package, but no etRemoteFunc is defined for it. It is up to the programmer to define an etRemoteFunc and start the ETRemote process.
 
@@ -179,16 +224,16 @@ The actress.ETRemote event type is already defined in the actress package, but n
 
 ```go
 etRemoteFunc := func(ctx context.Context, p *actress.Process) func() {
-		fn := func() {
-			for {
-				select {
-				case ev := <-p.InCh:
-					// The event received here came here since an event was processed,
+        fn := func() {
+            for {
+                select {
+                case ev := <-p.InCh:
+                    // The event received here came here since an event was processed,
                     // and a value was set in the DstNode field of the event.
                     // Also, when an event is received here, the type of event is ETRemote,
                     // and the NextEvent field holds the original event that was
                     // processed when it was decided to send it to a remote node.
-					//
+                    //
                     // We can now take the NextEvent and choose to do what we want with the event.
                     //
                     // The DstNode field holds the name of the remote node. We can then use
@@ -202,20 +247,20 @@ etRemoteFunc := func(ctx context.Context, p *actress.Process) func() {
                     // also need to define an MQTT receiver Actress/Process that will be able
                     // to receive the event on the remote node.
                     
-				case <-ctx.Done():
-					return
-				}
-			}
-		}
-		return fn
-	}
+                case <-ctx.Done():
+                    return
+                }
+            }
+        }
+        return fn
+    }
 
 // Register the event name and event function as a process,
 // and start it with the Act() method.
 actress.NewProcess(ctx, rootAct, actress.ETRemote, etRemoteFunc).Act()
 ```
 
-And then what the general MQTT actreess for the receiving side would look like.
+And then what the general MQTT or NATS actreess for the receiving side could look like.
 
 ```go
 
@@ -223,7 +268,7 @@ And then what the general MQTT actreess for the receiving side would look like.
 const ETMQTTReceiver actress.Name = "ETMQTTReceiver"
 
 etMQTTReceiverFunc := func(ctx context.Context, p *actress.Process) func() {
-		fn := func() {
+        fn := func() {
             go func() {
                 // The outline of how an MQTT receiver could be implemented.
                 // 1. Connect to MQTT broker.
@@ -233,11 +278,11 @@ etMQTTReceiverFunc := func(ctx context.Context, p *actress.Process) func() {
                 // 5. Use the AddEvent() method to add the event to the queue
                 //    of messages to be handled
             }()
-			<-ctx.Done():
-			return
-		}
-		return fn
-	}
+            <-ctx.Done():
+            return
+        }
+        return fn
+    }
 
 // Register the event name and event function as a process,
 // and start it with the Act() method.
