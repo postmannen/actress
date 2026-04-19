@@ -8,11 +8,13 @@ A Concurrent Actor framework written in Go.
 
 ## Overview
 
-Create custom processes (actors, actresses), where the processes can communicate by sending events to pass the result from one processes to the next for further processing, or by chaining together process as workflows to create a series of Events that together will provide some end result.
+Create custom processes (actors, actresses), where a process holds a piece of code that does some piece of work. Processes can communicate by sending events to pass the result from one processes to the next process to further process the result.
+
+The event can define what the next process to call is, and the next process will choose what to do next, or the event itself can hold a chain of events to use for the given data to create specific workflows of what to do.
 
 By passing the result of one actor in an event we can completely avoid shared state.
 
-High level outline of how it works:
+### High level outline of how it works:
 
 1. Define Processes with Event Types and Event Functions for two processes.
    - A, MetricReader, will read the metrics from some source(s).
