@@ -32,11 +32,17 @@ func etRemoteFn(ctx context.Context, p *actress.Process) func() {
 			p.SignalReady()
 
 			select {
-			// Wait for ETRemote events, that are wrapped around the actual event that should be forwarded.
+			// Wait for ETRemote events, that are wrapped around the actual
+			// event that should be forwarded, and the actual event is to be
+			// found in ev.NextEvent
 			case ev := <-p.InCh:
 				// Get the actual event that is wrapped in the ETRemote event.
 				nextEv := ev.NextEvent
-				// Set the .SrcNode so the remote node could check where the event came from originally.
+				// Set the .SrcNode so the remote node could check where the
+				// event came from originally before we pass it on.
+				// We now wrap the whole "original" event in an ETMulticast
+				// send event, and we put the original event in the NextEvent
+				// field.
 				nextEv.SrcNode = p.Config.NodeName
 				multicastEV := actress.Event{
 					Name:      ETMulticastSend,
@@ -99,7 +105,6 @@ func etMulticastSend(ctx context.Context, p *actress.Process) func() {
 
 const ETMulticastReceive actress.EventName = "ETMulticastReceive"
 
-// event function
 func etMulticastReceive(ctx context.Context, p *actress.Process) func() {
 	fn := func() {
 		addr, err := net.ResolveUDPAddr("udp4", addressString)
@@ -142,8 +147,9 @@ func test1Func(ctx context.Context, p *actress.Process) func() {
 			select {
 			case ev := <-p.InCh:
 				upper := strings.ToUpper(string(ev.Data))
-				// Pass on the processing to the next process, and use the NextEvent we have specified in main
-				// for the EventType, and add the result of ToUpper to the data field.
+				// Pass on the processing to the next process, and use the
+				// NextEvent we have specified in main for the EventType,
+				// and add the result of ToUpper to the data field.
 				p.AddEvent(actress.Event{
 					Name:    ev.NextEvent.Name,
 					Data:    []byte(upper),
@@ -160,7 +166,8 @@ func test1Func(ctx context.Context, p *actress.Process) func() {
 
 const ETTest2 actress.EventName = "ETTest2"
 
-// Define the second function that will be attached to the ETTest2 EventType process.
+// Define the second function that will be attached to the ETTest2 EventType
+// process.
 func test2Func(ctx context.Context, p *actress.Process) func() {
 	fn := func() {
 		for {
@@ -212,6 +219,12 @@ func main() {
 	oneAc2.Act()
 	actress.NewProcess(ctx, rootAct1, actress.ETRemote, etRemoteFn).Act()
 
+	// Start all the registered processes on actress system 2
+	err := rootAct1.Act()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// -----------
 
 	// Create a new root process.
@@ -224,20 +237,25 @@ func main() {
 	twoAc2.Act()
 	actress.NewProcess(ctx, rootAct2, actress.ETRemote, etRemoteFn).Act()
 
-	// Start all the registered processes.
-	err := rootAct2.Act()
+	// Start all the registered processes on actress system 2
+	err = rootAct2.Act()
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	// -----------------
+
 	// Pass in an event destined for an ETTest1 EventType process, and also specify
 	// the next event to be used when passing the result on from ETTest1 to the next
 	// process which here is ETTest2. We want the next event to be handled on another
-	// node, so we specify the DstNode of the NextEvent to "two", so the NextEvent
-	// will be sent to the ETRemote of "one" to be delivered remotely.
+	// node, so we specify the DstNode of the NextEvent to some random value so it will
+	// be sent via the ETRemote function.
+	// Since multicast don't use a specific node's name, we can just write whatever we
+	// want. The trick is that DstNode needs to contain something so the system thinks
+	// it is to be delivered elsewhere and handled with the ETRemote actor.
 	rootAct1.AddEvent(actress.Event{Name: ETTest1,
 		Data:      []byte("test data from one"),
-		NextEvent: &actress.Event{Name: ETTest2, DstNode: "two"},
+		NextEvent: &actress.Event{Name: ETTest2, DstNode: "doesntReallyMatterwWeremMulticasting"},
 	},
 	)
 
