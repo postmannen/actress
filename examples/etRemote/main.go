@@ -138,10 +138,9 @@ func etMulticastReceive(ctx context.Context, p *actress.Process) func() {
 	return fn
 }
 
-const ETTest1 actress.EventName = "ETTest1"
+const ETToUpper actress.EventName = "ETToUpper"
 
-// Define the first function that will be attached to the ETTest1 EventType process.
-func test1Func(ctx context.Context, p *actress.Process) func() {
+func etToUpperFn(ctx context.Context, p *actress.Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -164,11 +163,9 @@ func test1Func(ctx context.Context, p *actress.Process) func() {
 	return fn
 }
 
-const ETTest2 actress.EventName = "ETTest2"
+const ETAppendDots actress.EventName = "ETAppendDots"
 
-// Define the second function that will be attached to the ETTest2 EventType
-// process.
-func test2Func(ctx context.Context, p *actress.Process) func() {
+func ETAppendDotsFn(ctx context.Context, p *actress.Process) func() {
 	fn := func() {
 		for {
 			select {
@@ -210,17 +207,17 @@ func main() {
 	// Create a new root process.
 	cfg1, _ := actress.NewConfig("info")
 	cfg1.NodeName = "one"
-	rootAct1 := actress.NewRootProcess(ctx, nil, cfg1)
+	root1 := actress.NewRootProcess(ctx, nil, cfg1)
 
 	// Register the event types and event function to processes.
-	oneAc1 := actress.NewProcess(ctx, rootAct1, ETTest1, test1Func)
-	oneAc1.Act()
-	oneAc2 := actress.NewProcess(ctx, rootAct1, ETTest2, test2Func)
-	oneAc2.Act()
-	actress.NewProcess(ctx, rootAct1, actress.ETRemote, etRemoteFn).Act()
+	root1ToUpper := actress.NewProcess(ctx, root1, ETToUpper, etToUpperFn)
+	root1ToUpper.Act()
+	root1AppendDots := actress.NewProcess(ctx, root1, ETAppendDots, ETAppendDotsFn)
+	root1AppendDots.Act()
+	actress.NewProcess(ctx, root1, actress.ETRemote, etRemoteFn).Act()
 
 	// Start all the registered processes on actress system 2
-	err := rootAct1.Act()
+	err := root1.Act()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -230,15 +227,15 @@ func main() {
 	// Create a new root process.
 	cfg2, _ := actress.NewConfig("info")
 	cfg2.NodeName = "two"
-	rootAct2 := actress.NewRootProcess(ctx, nil, cfg2)
+	root2 := actress.NewRootProcess(ctx, nil, cfg2)
 
 	// Register the event types and event function to processes.
-	twoAc2 := actress.NewProcess(ctx, rootAct2, ETTest2, test2Func)
-	twoAc2.Act()
-	actress.NewProcess(ctx, rootAct2, actress.ETRemote, etRemoteFn).Act()
+	root2AppendDots := actress.NewProcess(ctx, root2, ETAppendDots, ETAppendDotsFn)
+	root2AppendDots.Act()
+	actress.NewProcess(ctx, root2, actress.ETRemote, etRemoteFn).Act()
 
 	// Start all the registered processes on actress system 2
-	err = rootAct2.Act()
+	err = root2.Act()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -253,14 +250,14 @@ func main() {
 	// Since multicast don't use a specific node's name, we can just write whatever we
 	// want. The trick is that DstNode needs to contain something so the system thinks
 	// it is to be delivered elsewhere and handled with the ETRemote actor.
-	rootAct1.AddEvent(actress.Event{Name: ETTest1,
+	root1.AddEvent(actress.Event{Name: ETToUpper,
 		Data:      []byte("test data from one"),
-		NextEvent: &actress.Event{Name: ETTest2, DstNode: "doesntReallyMatterwWeremMulticasting"},
+		NextEvent: &actress.Event{Name: ETAppendDots, DstNode: "doesntReallyMatterwWeremMulticasting"},
 	},
 	)
 
 	// Wait and receive the result from the ETTest processes.
-	ev2 := <-twoAc2.TestCh
-	ev1 := <-oneAc2.TestCh
+	ev2 := <-root2.TestCh
+	ev1 := <-root1.TestCh
 	fmt.Printf("The result: one: %s, two: %s\n", ev1.Data, ev2.Data)
 }
