@@ -81,9 +81,6 @@ func etMulticastSend(ctx context.Context, p *actress.Process) func() {
 				// is still set there. This can be useful if we wanted to use the name of
 				// the DstNode when creating a mqtt topic or nats subject, but now with
 				// multicast we don't really need it.
-				// Either way, we should blank it out before sending the event, so we don't
-				// end in a situation where the ETRemote loops sending back and forth.
-				evNextEvent.DstNode = ""
 
 				b, err := json.Marshal(evNextEvent)
 				if err != nil {
@@ -131,6 +128,11 @@ func etMulticastReceive(ctx context.Context, p *actress.Process) func() {
 			if err != nil {
 				log.Fatalf("error: failed to unmarshal read udp data %v\n", err)
 			}
+
+			// Now when the message is received at it's destination, we don't need
+			// the dst field anymore, so we should blank it out to avoid the message
+			// being resent, and potentially causing sending loops.
+			ev.DstNode = ""
 
 			p.AddEvent(ev)
 		}
