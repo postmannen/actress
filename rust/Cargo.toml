@@ -1,0 +1,22 @@
+[package]
+name = "actress"
+version = "0.1.0"
+edition = "2021"
+description = "A concurrent actor framework. Rust port of the Go 'actress' package."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+# crossbeam-channel is used as the close equivalent of Go channels. It is a
+# multi producer / multi consumer channel implementation that supports the
+# select! macro, which we need to mirror Go's "select" over several channels
+# plus a cancellation channel.
+crossbeam-channel = "0.5"
+# ctrlc is used for handling SIGINT (CTRL+C), the equivalent of Go's
+# signal.Notify in the ETOsSignal process.
+ctrlc = "3"
+# uuid mirrors github.com/google/uuid, used by NewUUID for dynamic processes.
+uuid = { version = "1", features = ["v4"] }
+# serde + ciborium mirror github.com/fxamacker/cbor, used for encoding the
+# data passed to and from the supervisor and pid processes.
+serde = { version = "1", features = ["derive"] }
+ciborium = "0.2"
