@@ -10,7 +10,7 @@ use crate::context::{CancelFn, Context};
 use crate::customprocesses::{customProcesses, newCustomProcesses};
 use crate::dynamicprocesses::{dynamicProcesses, newDynamicProcesses};
 use crate::errorprocesses::{errorProcesses, newErrorProcesses};
-use crate::events::{Event, EventName, ETRoot};
+use crate::events::{ETRoot, Event, EventName};
 use crate::staticprocesses::{newStaticProcesses, staticProcesses, ETRemote};
 use crate::supervisorprocesses::{
     esProcessesMapDataIn, newsuperVisorProcesses, supervisorProcesses,
@@ -242,10 +242,18 @@ impl Process {
                 // Not allowed to delete static process.
             }
             b'D' => {
-                self.DynamicProcesses.procMap.lock().unwrap().remove(&self.Event);
+                self.DynamicProcesses
+                    .procMap
+                    .lock()
+                    .unwrap()
+                    .remove(&self.Event);
             }
             b'C' => {
-                self.CustomProcesses.procMap.lock().unwrap().remove(&self.Event);
+                self.CustomProcesses
+                    .procMap
+                    .lock()
+                    .unwrap()
+                    .remove(&self.Event);
             }
             b'R' => {
                 // Not allowed to delete error process.
@@ -366,8 +374,17 @@ impl Process {
         self.pids.toProc.add(self.PID, self.clone());
         self.addToProcessesMap();
 
+        // TODO:
+        // — body is an Option<F> where F is the actual closure type stored in fnCell.
         let body = self.fnCell.lock().unwrap().take();
+        // — This destructures the Option, binding body to the actual closure (a value that implements FnOnce()).
         if let Some(body) = body {
+            // — This wraps body in a new, anonymous closure || body() that just calls body(). The move captures that new closure's body by value.
+            // So you have two closures: the original one stored in fnCell, and a second throwaway wrapper that immediately calls it. The linter is saying the wrapper is
+            // redundant — just pass body directly:
+            // std::thread::spawn(body);
+            // This works because body already implements FnOnce() + Send + 'static (it was stored in fnCell for exactly this purpose), so it can be moved into the thread
+            // directly without the extra || ...() indirection.
             std::thread::spawn(move || body());
         }
 
@@ -548,47 +565,132 @@ pub fn NewRootProcess(ctx: &Context, fnc: Option<ETFunc>, conf: Config) -> Arc<P
     let mut pi: registerProcessInfo = Vec::new();
 
     // Starting error handling processes.
-    NewProcess(&root.Ctx, &root, crate::errorprocesses::ERLog, Box::new(crate::errorprocesses::erLogFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::errorprocesses::ERTest, Box::new(crate::errorprocesses::erTestFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::errorprocesses::ERNone, Box::new(crate::errorprocesses::erNoneFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::staticprocesses::ETPrint, Box::new(crate::staticprocesses::etPrintFn))
-        .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::errorprocesses::ERLog,
+        Box::new(crate::errorprocesses::erLogFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::errorprocesses::ERTest,
+        Box::new(crate::errorprocesses::erTestFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::errorprocesses::ERNone,
+        Box::new(crate::errorprocesses::erNoneFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::staticprocesses::ETPrint,
+        Box::new(crate::staticprocesses::etPrintFn),
+    )
+    .actForRoot(&mut pi);
 
     // Starting the routers.
-    NewProcess(&root.Ctx, &root, crate::staticprocesses::ETRouter, Box::new(crate::staticprocesses::etRouterFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::errorprocesses::ERRouter, Box::new(crate::errorprocesses::erRouterFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::dynamicprocesses::EDRouter, Box::new(crate::dynamicprocesses::edRouterFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::customprocesses::ECRouter, Box::new(crate::customprocesses::ecRouterFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::supervisorprocesses::ESRouter, Box::new(crate::supervisorprocesses::esRouterFn))
-        .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::staticprocesses::ETRouter,
+        Box::new(crate::staticprocesses::etRouterFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::errorprocesses::ERRouter,
+        Box::new(crate::errorprocesses::erRouterFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::dynamicprocesses::EDRouter,
+        Box::new(crate::dynamicprocesses::edRouterFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::customprocesses::ECRouter,
+        Box::new(crate::customprocesses::ecRouterFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::supervisorprocesses::ESRouter,
+        Box::new(crate::supervisorprocesses::esRouterFn),
+    )
+    .actForRoot(&mut pi);
 
     // Starting the supervisor process.
-    NewProcess(&root.Ctx, &root, crate::supervisorprocesses::ESProcesses, crate::supervisorprocesses::esProcessesFn())
-        .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::supervisorprocesses::ESProcesses,
+        crate::supervisorprocesses::esProcessesFn(),
+    )
+    .actForRoot(&mut pi);
 
     // Starting the remaining processes.
-    NewProcess(&root.Ctx, &root, crate::staticprocesses::ETOsSignal, Box::new(crate::staticprocesses::etOsSignalFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::staticprocesses::ETTestCh, Box::new(crate::staticprocesses::etTestChFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::staticprocesses::ETPid, Box::new(crate::staticprocesses::etPidFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::staticprocesses::ETReadFile, Box::new(crate::staticprocesses::ETReadFileFn))
-        .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::staticprocesses::ETOsSignal,
+        Box::new(crate::staticprocesses::etOsSignalFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::staticprocesses::ETTestCh,
+        Box::new(crate::staticprocesses::etTestChFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::staticprocesses::ETPid,
+        Box::new(crate::staticprocesses::etPidFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::staticprocesses::ETReadFile,
+        Box::new(crate::staticprocesses::ETReadFileFn),
+    )
+    .actForRoot(&mut pi);
 
-    NewProcess(&root.Ctx, &root, crate::staticprocesses::ETDone, Box::new(crate::staticprocesses::etDoneFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::staticprocesses::ETExit, Box::new(crate::staticprocesses::etExitFn))
-        .actForRoot(&mut pi);
-    NewProcess(&root.Ctx, &root, crate::staticprocesses::ETPidGetAll, Box::new(crate::staticprocesses::etPidGetAllFn))
-        .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::staticprocesses::ETDone,
+        Box::new(crate::staticprocesses::etDoneFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::staticprocesses::ETExit,
+        Box::new(crate::staticprocesses::etExitFn),
+    )
+    .actForRoot(&mut pi);
+    NewProcess(
+        &root.Ctx,
+        &root,
+        crate::staticprocesses::ETPidGetAll,
+        Box::new(crate::staticprocesses::etPidGetAllFn),
+    )
+    .actForRoot(&mut pi);
 
     RegisterProcessesInESProcesses(&root, &pi);
 

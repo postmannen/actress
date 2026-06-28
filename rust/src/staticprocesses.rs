@@ -279,16 +279,14 @@ pub fn etExitFn(_ctx: Context, p: Arc<Process>) -> ProcFn {
     Box::new(move || {
         p.SignalReady();
 
-        loop {
             select! {
                 recv(p.InCh.rx) -> msg => {
                     let d = match msg { Ok(e) => e, Err(_) => return };
                     println!("etExitFn: got event ETExit: {}", String::from_utf8_lossy(&d.Data));
                     std::process::exit(0);
                 }
-                recv(p.Ctx.done()) -> _ => return,
+                recv(p.Ctx.done()) -> _ => {},
             }
-        }
     })
 }
 
