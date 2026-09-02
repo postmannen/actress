@@ -1,8 +1,12 @@
 ---
-trigger: always_on
+name: actress
+description: |
+  An overview of how the Actress actor framework works.
 ---
 
 # Actress Actor System — Architecture & Implementation Guide
+
+All details can be found locally on the following path: ~/go/src/github.com/postmannen/actress
 
 ## Overview
 

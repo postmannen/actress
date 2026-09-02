@@ -55,7 +55,7 @@ func newErrorProcesses() *errorProcesses {
 	return &p
 }
 
-// Router for error events.
+// ERRouter for error events.
 const ERRouter EventName = "ERRouter"
 
 // Process function for routing and handling events.
@@ -90,13 +90,13 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-// Instructions for error logging.
+// InstructionError for error logging.
 const InstructionError Instruction = "InstructionError"
 const InstructionInfo Instruction = "InstructionInfo"
 const InstructionDebug Instruction = "InstructionDebug"
 const InstructionFatal Instruction = "InstructionFatal"
 
-// Log errors.
+// ERLog for log errors.
 const ERLog EventName = "ERLog"
 
 // Will log errors to the console based on the Instruction field of the event.
@@ -135,7 +135,7 @@ func erLogFn(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-// Log and exit system.
+// ERTest log and exit system.
 const ERTest EventName = "ERTest"
 
 func erTestFn(ctx context.Context, p *Process) func() {
@@ -160,7 +160,7 @@ func erTestFn(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-// Will drop the event if it is an error event.
+// ERNone will drop the event if it is an error event.
 const ERNone EventName = "ERNone"
 
 // Process function for dropping error events. Primarily used for testing.

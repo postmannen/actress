@@ -25,7 +25,7 @@ func newsuperVisorProcesses() *supervisorProcesses {
 // Events and event functions, ESRouter
 // ------------------------------------------------------------------------------
 
-// Router for supervisor events.
+// ESRouter for supervisor events.
 const ESRouter EventName = "ESRouter"
 
 // Process function for routing and handling supervisor events. Will check
@@ -79,10 +79,10 @@ func esRouterFn(ctx context.Context, p *Process) func() {
 // Events and event functions, Process handling
 // ------------------------------------------------------------------------------
 
-// Handles information about the currently running processes in the local Actress system.
+// ESProcesses handles information about the currently running processes in the local Actress system.
 const ESProcesses EventName = "ESProcesses"
 
-// Will instruct to get all information about all processes.
+// InstructionESProcessesAdd will instruct to get all information about all processes.
 const InstructionESProcessesAdd Instruction = "InstructionESProcessesAdd"
 const InstructionESProcessesDelete Instruction = "InstructionESProcessesDelete"
 const InstructionESProcessesGetAll Instruction = "InstructionESProcessesGetAll"

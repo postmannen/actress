@@ -356,7 +356,7 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config) *Process {
 	return &p
 }
 
-// Register all the processes in ESProcesses.
+// RegisterProcessesInESProcesses register all the processes in ESProcesses.
 func RegisterProcessesInESProcesses(p *Process, pi *registerProcessInfo) {
 	// // Register all the processes in ESProcesses.
 	// for _, md := range *pi {
@@ -445,10 +445,15 @@ func (p *Process) AddEvent(event Event) {
 
 	if event.DstNode != p.Config.NodeName && event.DstNode != "" {
 
+		// Allocate explicitly inside this branch so the 160-byte `event`
+		// parameter does not escape to the heap on AddEvent call.
+		e := new(Event)
+		*e = event
+
 		remoteEv := Event{
 			Name:      ETRemote,
 			Nr:        eventNr,
-			NextEvent: &event,
+			NextEvent: e,
 		}
 
 		//if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
@@ -503,8 +508,16 @@ func (p *Process) addEventStatic(event Event) {
 		//if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
 		//	slog.Debug("addEventStatic", "[2 of 2] added event to StaticEventCh on", p.Config.NodeName, "event", CopyEventFields(&event))
 		//}
-	case <-time.After(time.Second * 5):
-		slog.Error("addEventStatic", "TIMEOUT: reason...one of the later AddEvent commands probably are not working well. Check the debug output", event)
+		//
+	// Since most events will be put directly on the StaticEventCh in a normal
+	// situation, we put a the time.After into a default case to avoid an extra
+	// allocation for each event handled which is what happens with time.After.
+	default:
+		select {
+		case p.StaticEventCh <- event:
+		case <-time.After(time.Second * 5):
+			slog.Error("addEventStatic", "TIMEOUT: reason...one of the later AddEvent commands probably are not working well. Check the debug output", event)
+		}
 	}
 }
 
@@ -529,7 +542,7 @@ func (p *Process) addEventError(event Event) {
 	p.ErrorEventCh <- event
 }
 
-// Will start the ETFunc attached to the process.
+// Act will start the ETFunc attached to the process.
 //
 // If no ETFunc is defined for the process will just return
 // after calling this function. The process can still be used
@@ -560,7 +573,7 @@ func (p *Process) Act() error {
 	return nil
 }
 
-// Signal that the function is ready.
+// SignalReady that the function is ready.
 func (p *Process) SignalReady() {
 	// Close the channel exactly once; multiple calls are no-ops
 	p.readyOnce.Do(func() {
@@ -570,7 +583,7 @@ func (p *Process) SignalReady() {
 	})
 }
 
-// Wait for the process function to be ready and started for the specific process.
+// WaitForReady waits for the process function to be ready and started for the specific process.
 func (p *Process) WaitForReady() {
 	if p.readyCh != nil {
 		select {
@@ -610,7 +623,7 @@ func (p *Process) actForRoot(pi *registerProcessInfo) error {
 
 }
 
-// Will Cancel the context attached to the process.
+// Stop will Cancel the context attached to the process.
 // Will delete the process from the processes map.
 // Will delete the pid from the pids map.
 func (p *Process) Stop() error {

@@ -1,8 +1,6 @@
 module github.com/postmannen/actress
 
-go 1.23.0
-
-toolchain go1.24.3
+go 1.27.0
 
 require (
 	github.com/fxamacker/cbor/v2 v2.9.0

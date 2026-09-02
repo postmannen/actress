@@ -481,7 +481,7 @@ func BenchmarkSingleProcess(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	for n := 0; n < b.N; n++ {
+	for n := 0; b.Loop(); n++ {
 		rootp.AddEvent(Event{Name: ETTest, Data: []byte("test")})
 		if r := <-testCh; r != "test" {
 			b.Fatalf("ETTest failed\n")
@@ -524,7 +524,7 @@ func BenchmarkSingleProcessEventAndError(b *testing.B) {
 	}
 	NewProcess(ctx, rootp, ETTest, tFunc).Act()
 
-	for n := 0; n < b.N; n++ {
+	for n := 0; b.Loop(); n++ {
 		rootp.AddEvent(Event{Name: ETTest,
 
 			Data: []byte("test")})
@@ -595,7 +595,7 @@ func BenchmarkTwoProcesses(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	for n := 0; n < b.N; n++ {
+	for n := 0; b.Loop(); n++ {
 		rootp.AddEvent(Event{Name: ETTest1,
 
 			Data: []byte("test")})
@@ -682,7 +682,7 @@ func BenchmarkThreeProcesses(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	for n := 0; n < b.N; n++ {
+	for n := 0; b.Loop(); n++ {
 		rootp.AddEvent(Event{Name: ETTest1,
 
 			Data: []byte("test")})
@@ -736,5 +736,116 @@ func TestEDSync(t *testing.T) {
 		t.Log("EDSync successful")
 	case <-time.After(time.Second * 3):
 		t.Fatalf("EDSync failed\n")
+	}
+}
+
+// ----------------------------------------------------------------------------
+func BenchmarkTwoDynamicProcesses(b *testing.B) {
+	//log.SetOutput(io.Discard)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cfg, _ := NewConfig("debug")
+	rootp := NewRootProcess(ctx, nil, cfg)
+
+	testCh := make(chan string)
+
+	const EDTest1 EventName = "EDTest1"
+	const EDTest2 EventName = "EDTest2"
+
+	tFunc1 := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			for {
+				p.SignalReady()
+
+				select {
+				case result := <-p.InCh:
+					p.AddEvent(Event{Name: EDTest2, Data: result.Data})
+
+				case <-p.Ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	NewProcess(ctx, rootp, EDTest1, tFunc1).Act()
+
+	tFunc2 := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			for {
+				p.SignalReady()
+
+				select {
+				case result := <-p.InCh:
+					testCh <- string(result.Data)
+
+				case <-p.Ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	NewProcess(ctx, rootp, EDTest2, tFunc2).Act()
+
+	err := rootp.Act()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	for n := 0; b.Loop(); n++ {
+		rootp.AddEvent(Event{Name: EDTest1, Data: []byte("test")})
+		if r := <-testCh; r != "test" {
+			b.Fatalf("EDTest failed\n")
+		}
+	}
+}
+
+// ---
+
+func BenchmarkSingleDynamicProcess(b *testing.B) {
+	//log.SetOutput(io.Discard)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	testCh := make(chan string)
+
+	const EDTest EventName = "EDTest"
+
+	tFunc := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			for {
+				p.SignalReady()
+
+				select {
+				case result := <-p.InCh:
+					testCh <- string(result.Data)
+				case <-p.Ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	cfg, _ := NewConfig("debug")
+	rootp := NewRootProcess(ctx, nil, cfg)
+	NewProcess(ctx, rootp, EDTest, tFunc).Act()
+	err := rootp.Act()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	for n := 0; b.Loop(); n++ {
+		rootp.AddEvent(Event{Name: EDTest, Data: []byte("test")})
+		if r := <-testCh; r != "test" {
+			b.Fatalf("EDTest failed\n")
+		}
 	}
 }

@@ -31,7 +31,7 @@ type Config struct {
 	LogLevel         string
 }
 
-// New config prepare a *Config, and a *flag.FlagSet, and return the
+// NewConfig prepares a *Config, and a *flag.FlagSet, and return the
 // resulting actress *Config and *flag.FlagSet.
 // The flags are checked for env variables, and if not found, the default value is used.
 // The flagset needs to be parsed for the flags to be set.
@@ -56,9 +56,9 @@ func NewConfig(logLevel string) (*Config, *flag.FlagSet) {
 	return &c, fs
 }
 
-// Check if an env variable is set. If found, return the value.
-// Takes the name of the env variable, and the actual variable
-// containing a default value as it's input.
+// CheckEnv checks if an env variable is set. If found, return the value.
+// Takes the name of the env variable, and the actual variable containing
+// a default value as it's input.
 func CheckEnv[T any](key string, v T) any {
 	val, ok := os.LookupEnv(key)
 	if !ok {

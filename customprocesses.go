@@ -77,7 +77,7 @@ func newCustomProcesses() *customProcesses {
 // Events and event functions.
 // ------------------------------------------------------------------------------
 
-// Router for custom events.
+// ECRouter for custom events.
 const ECRouter EventName = "ECRouter"
 
 // Process function for routing and handling events. Will check
@@ -155,12 +155,12 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 	return fn
 }
 
-// Primarily used for testing to check that the ECRouter properly routes events, and that
-// custom processes start up correctly.
+// ECGeneralDelivery is primarily used for testing to check that the ECRouter
+// properly routes events, and that custom processes start up correctly.
 const ECGeneralDelivery EventName = "ECGeneralDelivery"
 
-// Primarily used for testing to check that the ECRouter properly routes events, and that
-// custom processes start up correctly.
+// ecGeneralDeliveryFn is primarily used for testing to check that the ECRouter
+// properly routes events, and that custom processes start up correctly.
 func ecGeneralDeliveryFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		p.SignalReady()

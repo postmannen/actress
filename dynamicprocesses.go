@@ -77,7 +77,7 @@ func newDynamicProcesses() *dynamicProcesses {
 	return &p
 }
 
-// Will create and return a new UUID prefix with "ED-".
+// NewUUID will create and return a new UUID prefix with "ED-".
 func NewUUID() string {
 	u := fmt.Sprintf("ED-%v", uuid.New())
 	return u
@@ -87,7 +87,7 @@ func NewUUID() string {
 // Events and event functions.
 // ------------------------------------------------------------------------------
 
-// Router for normal events.
+// EDRouter for normal events.
 const EDRouter EventName = "EDRouter"
 
 // Process function for routing and handling events. Will check
@@ -117,47 +117,44 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 				// The checking is done in a go routine so the router don't block
 				// here waiting, and we continue with the next event in the queue.
 				p.DynamicProcesses.mu.Lock()
-				_, ok := p.DynamicProcesses.procMap[ev.Name]
+				dynP, ok := p.DynamicProcesses.procMap[ev.Name]
 				p.DynamicProcesses.mu.Unlock()
-				if !ok {
-					go func(ev Event) {
-						// Try to 3 times to deliver the message.
-						for i := 0; i < 3; i++ {
-							p.DynamicProcesses.mu.Lock()
-							_, ok := p.DynamicProcesses.procMap[ev.Name]
-							p.DynamicProcesses.mu.Unlock()
+				if ok {
+					// Process was registered. Deliver the event to the process InCh.
+					if slog.Default().Enabled(ctx, slog.LevelDebug) {
+						slog.Debug("edRouterFn", "on", p.Config.NodeName, "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name)
+					}
 
-							if !ok {
-								slog.Error("edRouterFn", "on", p.Config.NodeName, "found no process registered for the event type", ev.Name, "ev.DstNode", ev.DstNode)
-								time.Sleep(time.Second * 1)
-								continue
-							}
+					dynP.InCh <- ev
 
-							// Process is now registred, so we can safely put
-							//the event on the InCh of the process.
-							p.DynamicProcesses.mu.Lock()
-							p.DynamicProcesses.procMap[ev.Name].InCh <- ev
-							p.DynamicProcesses.mu.Unlock()
-
-							return
-						}
-
-					}(ev)
-
-					// The above go routine will wait, and check if the process becomes
-					// available, and send the event if it the process eventually found,
-					// so we can continue with the next event in the queue.
+					// Done with the event, loop back, and continue with the next event.
 					continue
 				}
 
-				// Process was registered. Deliver the event to the process InCh.
-				p.DynamicProcesses.mu.Lock()
-				inCh := p.DynamicProcesses.procMap[ev.Name].InCh
-				p.DynamicProcesses.mu.Unlock()
+				// The process was not registered. Wait a bit and check if it is just
+				// taking some time to start.
+				go func(ev Event) {
+					// Try to 3 times to deliver the message.
+					for i := 0; i < 3; i++ {
+						slog.Error("edRouterFn", "on", p.Config.NodeName, "found no process registered for the event type", ev.Name, "ev.DstNode", ev.DstNode)
+						time.Sleep(time.Second * 1)
 
-				slog.Debug("edRouterFn", "on", p.Config.NodeName, "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh)
+						p.DynamicProcesses.mu.Lock()
+						dynP, ok := p.DynamicProcesses.procMap[ev.Name]
+						p.DynamicProcesses.mu.Unlock()
 
-				inCh <- ev
+						if !ok {
+							// process not found yet, loop again
+							continue
+						}
+
+						// Process is now registred, so we can safely put
+						//the event on the InCh of the process.
+						dynP.InCh <- ev
+
+						return
+					}
+				}(ev)
 
 			case <-p.Ctx.Done():
 				slog.Debug("edRouterFn", "got ctx.Done, on", p.Config.NodeName)
@@ -177,7 +174,7 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 // type as the NextEvent.
 const EDSync EventName = "EDSync"
 
-// EtSyncFn is the function that will be used to syncronize events.
+// EDSyncFn is the function that will be used to syncronize events.
 // It takes a channel that will be used to send a signal on when the
 // EDSync event is executed.
 //

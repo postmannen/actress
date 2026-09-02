@@ -112,16 +112,16 @@ func EvNext(nev *Event) EventOpt {
 	return fn
 }
 
-// Name is a unique name used to identify events. It is used both for
+// EventName is a unique name used to identify events. It is used both for
 // creating processes and also for routing messages to the correct process.
 type EventName string
 
-// The main Root process. By default the root process don't have an ETFunc
-// registered with it to handle the ETRoot eventtype, but one can be created
-// with the normal ETFunc function signature, and defined when creating a
-// new root process.
+// ETRoot is the main Root process. By default the root process don't have
+// an ETFunc registered with it to handle the ETRoot eventtype, but one can
+// be created with the normal ETFunc function signature, and defined when
+// creating a new root process.
 const ETRoot EventName = "ETRoot"
 
-// Function type describing the signature of a function that is to be used
-// when creating a new process.
+// ETFunc is the function type describing the signature of a function that
+// is to be used when creating a new process.
 type ETFunc func(context.Context, *Process) func()
