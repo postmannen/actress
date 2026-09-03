@@ -8,15 +8,16 @@ A Concurrent Actor framework written in Go.
 
 ## Actress Overview
 
-- Define custom individual **Processes** (Actors) that does some logic. 
-  - Hint: Think of a Process like a normal function that will listen for events, and do some logic when an event is received.
-- Multiple **Processes** (Actors) can be chained together to form a complete flow of work.
+Actor systems model a program as a collection of independent processes (actors), each with its own private state that no other actor can touch. Actors don't share memory; they communicate exclusively by sending messages to one another, which they handle asynchronously, one at a time. Because each actor owns its state and processes messages sequentially, there are no mutexes, no data races, and no lock-ordering bugs to reason about. This makes actor systems a natural fit for concurrent workloads on a single machine and for distributed systems.
+ 
+### So how is this done ?
 
-- Processes communicate with other Processes by sending **Events** (messages).
-
+- Define custom **Processes** (actors) that do some logic. A Process can be thought of as a normal function that listens for events, which does it's logic when an event is received.
+- Multiple Processes can be chained together to form a complete flow of work.
+- Processes communicate by sending **Events** (messages) to one another.
 - Multiple processes can run on the same instance, called a **Node**.
-- Multiple **Node** instances can run on the same machine.
-- Nodes can also be spread out in a network of multiple machines. Actress will automatically forward messages to the correct Node, and the node will do what is described in the message.
+- Multiple Nodes can run on the same machine.
+- Nodes can also be spread over a network of multiple machines; Actress provides functionality for automatically forwarding events between Nodes.
 
 ### Processes
 
@@ -28,7 +29,7 @@ To communicate with other processes, a process can send Event messages to other 
 
 Normally you might want to avoid sharing state, and state are shared by passing the state from one processes to the next as an event message.
 
-but, if needed, a process can also share state directly between the Process Functions if needed, by giving it a state variable or struct type that holds the state as an input argument to the event function.
+But, if needed, a process running in the same Node instance can share state directly between the Process Functions if needed. This can be done by giving it a state variable or struct type that holds the state as an input argument to the event function.
 
 Example:
 
