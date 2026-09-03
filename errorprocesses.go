@@ -76,11 +76,15 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 
 				inCh := p.ErrorProcesses.procMap[e.Name].InCh
 
-				slog.Debug("erRouterFn", "Routing event", p.Event, "node", p.Config.NodeName, "name", e.Name, "Inch", inCh)
+				if slog.Default().Enabled(ctx, slog.LevelDebug) {
+					slog.Debug("erRouterFn", "Routing event", p.Event, "node", p.Config.NodeName, "name", e.Name, "Inch", inCh)
+				}
 				inCh <- e
 
 			case <-p.Ctx.Done():
-				slog.Debug("erRouterFn", "got ctx.Done, on", p.Config.NodeName)
+				if slog.Default().Enabled(ctx, slog.LevelDebug) {
+					slog.Debug("erRouterFn", "got ctx.Done, on", p.Config.NodeName)
+				}
 
 				return
 			}
@@ -118,7 +122,9 @@ func erLogFn(ctx context.Context, p *Process) func() {
 				case InstructionInfo:
 					slog.Info("erLogFn", "instructionInfo, msg", er.Err)
 				case InstructionDebug:
-					slog.Debug("erLogFn", "instructionDebug, msg", er.Err)
+					if slog.Default().Enabled(ctx, slog.LevelDebug) {
+						slog.Debug("erLogFn", "instructionDebug, msg", er.Err)
+					}
 				case InstructionFatal:
 					slog.Error("erLogFn", "instructionFatal, msg", er.Err)
 					os.Exit(1)

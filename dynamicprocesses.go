@@ -95,7 +95,9 @@ const EDRouter EventName = "EDRouter"
 func edRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		defer func() {
-			slog.Debug("edRouterFn", "stopping process with defered stop", "")
+			if slog.Default().Enabled(ctx, slog.LevelDebug) {
+				slog.Debug("edRouterFn", "stopping process with defered stop", "")
+			}
 			p.Stop()
 		}()
 
@@ -157,7 +159,9 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 				}(ev)
 
 			case <-p.Ctx.Done():
-				slog.Debug("edRouterFn", "got ctx.Done, on", p.Config.NodeName)
+				if slog.Default().Enabled(ctx, slog.LevelDebug) {
+					slog.Debug("edRouterFn", "got ctx.Done, on", p.Config.NodeName)
+				}
 
 				return
 			}

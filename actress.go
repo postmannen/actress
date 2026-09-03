@@ -592,11 +592,15 @@ func (p *Process) WaitForReady() {
 		select {
 		// If the channel is closed by the user inside the p.fn function, the process function is started.
 		case <-p.readyCh:
-			slog.Debug("WaitForReady", "is ready", p.Event)
+			if slog.Default().Enabled(p.Ctx, slog.LevelDebug) {
+				slog.Debug("WaitForReady", "is ready", p.Event)
+			}
 		// If the timeout is reached, there the user have most likely forgotten to call the SignalReady function,
 		// so we wait for the defined amout of time, and assume that the process is ready.
 		case <-time.After(time.Millisecond * 5):
-			slog.Debug("WaitForReady", "should be ready, signal ready based on TIMEOUT", p.Event)
+			if slog.Default().Enabled(p.Ctx, slog.LevelDebug) {
+				slog.Debug("WaitForReady", "should be ready, signal ready based on TIMEOUT", p.Event)
+			}
 		}
 	}
 }

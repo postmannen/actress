@@ -140,12 +140,16 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 				inCh := p.CustomProcesses.procMap[ev.Name].InCh
 				p.CustomProcesses.mu.Unlock()
 
-				slog.Debug("ecRouterFn", "on", p.Config.NodeName, "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh)
+				if slog.Default().Enabled(ctx, slog.LevelDebug) {
+					slog.Debug("ecRouterFn", "on", p.Config.NodeName, "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh)
+				}
 
 				inCh <- ev
 
 			case <-p.Ctx.Done():
-				slog.Debug("ecRouterFn", "got ctx.Done, on", p.Config.NodeName)
+				if slog.Default().Enabled(ctx, slog.LevelDebug) {
+					slog.Debug("ecRouterFn", "got ctx.Done, on", p.Config.NodeName)
+				}
 
 				return
 			}

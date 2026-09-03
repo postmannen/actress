@@ -124,7 +124,9 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 				}(ev)
 
 			case <-p.Ctx.Done():
-				slog.Debug("etRouterFn", "got ctx.Done, on", p.Config.NodeName)
+				if slog.Default().Enabled(ctx, slog.LevelDebug) {
+					slog.Debug("etRouterFn", "got ctx.Done, on", p.Config.NodeName)
+				}
 
 				return
 			}
@@ -231,7 +233,9 @@ func etTestChFn(ctx context.Context, p *Process) func() {
 				p.TestCh <- e
 
 			case <-p.Ctx.Done():
-				slog.Debug("etTestChFn", "got ctx.Done, on", p.Config.NodeName)
+				if slog.Default().Enabled(ctx, slog.LevelDebug) {
+					slog.Debug("etTestChFn", "got ctx.Done, on", p.Config.NodeName)
+				}
 
 				return
 			}
@@ -263,7 +267,9 @@ func etPidGetAllFn(ctx context.Context, p *Process) func() {
 				p.AddEvent(Event{Name: e.NextEvent.Name, Data: b})
 
 			case <-p.Ctx.Done():
-				slog.Debug("etPidGetAllFn", "got ctx.Done, on", p.Config.NodeName)
+				if slog.Default().Enabled(ctx, slog.LevelDebug) {
+					slog.Debug("etPidGetAllFn", "got ctx.Done, on", p.Config.NodeName)
+				}
 
 				return
 			}

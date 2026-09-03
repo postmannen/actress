@@ -60,12 +60,16 @@ func esRouterFn(ctx context.Context, p *Process) func() {
 				inCh := p.supervisorProcesses.procMap[ev.Name].InCh
 				p.supervisorProcesses.mu.Unlock()
 
-				slog.Debug("esRouterFn", "on", p.Config.NodeName, "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh)
+				if slog.Default().Enabled(ctx, slog.LevelDebug) {
+					slog.Debug("esRouterFn", "on", p.Config.NodeName, "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh)
+				}
 
 				inCh <- ev
 
 			case <-p.Ctx.Done():
-				slog.Debug("esRouterFn", "got ctx.Done, on", p.Config.NodeName)
+				if slog.Default().Enabled(ctx, slog.LevelDebug) {
+					slog.Debug("esRouterFn", "got ctx.Done, on", p.Config.NodeName)
+				}
 
 				return
 			}
@@ -119,7 +123,9 @@ func esProcessesFn() ETFunc {
 
 						processMap[md.Name] = string(md.Name)
 
-						slog.Debug("esProcessesFn", "on", p.Config.NodeName, "processesMap", processMap)
+						if slog.Default().Enabled(ctx, slog.LevelDebug) {
+							slog.Debug("esProcessesFn", "on", p.Config.NodeName, "processesMap", processMap)
+						}
 
 						// Nothing to output are produced so we just add for the .NextEvent if defined.
 						if ev.NextEvent != nil {
@@ -160,7 +166,9 @@ func esProcessesFn() ETFunc {
 					}
 
 				case <-p.Ctx.Done():
-					slog.Debug("esProcessesFn", "got ctx.Done, on", p.Config.NodeName)
+					if slog.Default().Enabled(ctx, slog.LevelDebug) {
+						slog.Debug("esProcessesFn", "got ctx.Done, on", p.Config.NodeName)
+					}
 
 					return
 				}
