@@ -30,43 +30,44 @@ import (
 // Check if a process for the same event is defined, if so we
 // cancel the current process before we replace it with a new one.
 func (p *Process) addToProcessesMap() {
-	s := string(p.Event)
 
-	switch s[1] {
-	case 'T':
-		p.StaticProcesses.mu.Lock()
-		defer p.StaticProcesses.mu.Unlock()
-		if _, ok := p.StaticProcesses.procMap[p.Event]; ok {
-			p.StaticProcesses.procMap[p.Event].Cancel()
-		}
-		p.StaticProcesses.procMap[p.Event] = p
-	case 'D':
-		p.DynamicProcesses.mu.Lock()
-		defer p.DynamicProcesses.mu.Unlock()
-		if _, ok := p.DynamicProcesses.procMap[p.Event]; ok {
-			p.DynamicProcesses.procMap[p.Event].Cancel()
-		}
-		p.DynamicProcesses.procMap[p.Event] = p
-	case 'C':
-		p.CustomProcesses.mu.Lock()
-		defer p.CustomProcesses.mu.Unlock()
-		if _, ok := p.CustomProcesses.procMap[p.Event]; ok {
-			p.CustomProcesses.procMap[p.Event].Cancel()
-		}
-		p.CustomProcesses.procMap[p.Event] = p
-	case 'R':
-		if _, ok := p.ErrorProcesses.procMap[p.Event]; ok {
-			p.ErrorProcesses.procMap[p.Event].Cancel()
-		}
-		p.ErrorProcesses.procMap[p.Event] = p
-	case 'S':
-		p.supervisorProcesses.mu.Lock()
-		defer p.supervisorProcesses.mu.Unlock()
-		if _, ok := p.supervisorProcesses.procMap[p.Event]; ok {
-			p.supervisorProcesses.procMap[p.Event].Cancel()
-		}
-		p.supervisorProcesses.procMap[p.Event] = p
+	if len(p.Event) > 2 {
+		switch p.Event[1] {
+		case 'T':
+			p.StaticProcesses.mu.Lock()
+			defer p.StaticProcesses.mu.Unlock()
+			if _, ok := p.StaticProcesses.procMap[p.Event]; ok {
+				p.StaticProcesses.procMap[p.Event].Cancel()
+			}
+			p.StaticProcesses.procMap[p.Event] = p
+		case 'D':
+			p.DynamicProcesses.mu.Lock()
+			defer p.DynamicProcesses.mu.Unlock()
+			if _, ok := p.DynamicProcesses.procMap[p.Event]; ok {
+				p.DynamicProcesses.procMap[p.Event].Cancel()
+			}
+			p.DynamicProcesses.procMap[p.Event] = p
+		case 'C':
+			p.CustomProcesses.mu.Lock()
+			defer p.CustomProcesses.mu.Unlock()
+			if _, ok := p.CustomProcesses.procMap[p.Event]; ok {
+				p.CustomProcesses.procMap[p.Event].Cancel()
+			}
+			p.CustomProcesses.procMap[p.Event] = p
+		case 'R':
+			if _, ok := p.ErrorProcesses.procMap[p.Event]; ok {
+				p.ErrorProcesses.procMap[p.Event].Cancel()
+			}
+			p.ErrorProcesses.procMap[p.Event] = p
+		case 'S':
+			p.supervisorProcesses.mu.Lock()
+			defer p.supervisorProcesses.mu.Unlock()
+			if _, ok := p.supervisorProcesses.procMap[p.Event]; ok {
+				p.supervisorProcesses.procMap[p.Event].Cancel()
+			}
+			p.supervisorProcesses.procMap[p.Event] = p
 
+		}
 	}
 }
 
@@ -75,23 +76,25 @@ func (p *Process) deleteFromProcessesMap() {
 	// Check if a process for the same event is defined, and if so we
 	// cancel the current process before we replace it with a new one.
 
-	s := string(p.Event)
-	switch s[1] {
-	case 'T':
-		// slog.Error("", "msg", fmt.Errorf("not allowed to delete static process"))
-	case 'D':
-		p.DynamicProcesses.mu.Lock()
-		delete(p.DynamicProcesses.procMap, p.Event)
-		p.DynamicProcesses.mu.Unlock()
-	case 'C':
-		p.CustomProcesses.mu.Lock()
-		delete(p.CustomProcesses.procMap, p.Event)
-		p.CustomProcesses.mu.Unlock()
-	case 'R':
-		// slog.Error("", "msg", fmt.Errorf("not allowed to delete error process"))
-	case 'S':
-		// slog.Error("", "msg", fmt.Errorf("not allowed to delete supervisor process"))
+	if len(p.Event) > 2 {
 
+		switch p.Event[1] {
+		case 'T':
+			// slog.Error("", "msg", fmt.Errorf("not allowed to delete static process"))
+		case 'D':
+			p.DynamicProcesses.mu.Lock()
+			delete(p.DynamicProcesses.procMap, p.Event)
+			p.DynamicProcesses.mu.Unlock()
+		case 'C':
+			p.CustomProcesses.mu.Lock()
+			delete(p.CustomProcesses.procMap, p.Event)
+			p.CustomProcesses.mu.Unlock()
+		case 'R':
+			// slog.Error("", "msg", fmt.Errorf("not allowed to delete error process"))
+		case 'S':
+			// slog.Error("", "msg", fmt.Errorf("not allowed to delete supervisor process"))
+
+		}
 	}
 }
 

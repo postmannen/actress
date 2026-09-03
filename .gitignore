@@ -26,3 +26,5 @@ tmp
 */zig/zig-pkg
 .pi-glla/*
 .gitignore
+cpu.prof
+mem.prof
