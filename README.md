@@ -6,36 +6,17 @@ A Concurrent Actor framework written in Go.
 
 **Expect breaking changes between commits**.
 
-## Overview
+## Actress Overview
 
-Create custom processes (actors, actresses), where a process holds a piece of code that does some piece of work. Processes can communicate by sending events to pass the result from one processes to the next process to further process the result.
+- Define custom individual **Processes** (Actors) that does some logic. 
+  - Hint: Think of a Process like a normal function that will listen for events, and do some logic when an event is received.
+- Multiple **Processes** (Actors) can be chained together to form a complete flow of work.
 
-The event can define what the next process to call is, and the next process will choose what to do next, or the event itself can hold a chain of events to use for the given data to create specific workflows of what to do.
+- Processes communicate with other Processes by sending **Events** (messages).
 
-By passing the result of one actor in an event we can completely avoid shared state.
-
-### High level outline of how it works
-
-1. Define Processes with Event Types and Event Functions for two processes.
-   - A, MetricReader, will read the metrics from some source(s).
-   - B, MetricConsumer, will receive the metrics from the MetricReader, and present them in a dashboard.
-2. Start both processes.
-3. A metric of some kind are received or read at the MetricReader.
-4. The MetricReader will/can for example format the metric into a given structure.
-5. The MetricReader creates and adds an event queue to send to MetricConsumer, and attached the serialized data of the structure onto the event.
-6. The MetricConsumer process receives the event, extracts the data, and presents it in a dashboard.
-
-If we then figure out we need to do something more with the data before presented in the dashboard, like storing it into a database.
-
-1. Create a process for storing in database.
-    - C, DatabaseStorer.
-2. In A's event function, also add the creation of an event with the metrics data to be sent to the DatabaseStorer, so it becomes:
-
-A -> B
-A -> C
-
-Events can also be chained Like A -> C -> B.
-The difference then is that A's functions adds an event to C, and C adds an event to B.
+- Multiple processes can run on the same instance, called a **Node**.
+- Multiple **Node** instances can run on the same machine.
+- Nodes can also be spread out in a network of multiple machines. Actress will automatically forward messages to the correct Node, and the node will do what is described in the message.
 
 ### Processes
 
@@ -45,15 +26,15 @@ To communicate with other processes, a process can send Event messages to other 
 
 ### Sharing state
 
-Normally state are shared by passing the state from one processes to the next as an event.
+Normally you might want to avoid sharing state, and state are shared by passing the state from one processes to the next as an event message.
 
-If needed, a process can also share state directly between the Process Functions if needed, by giving it a state variable or struct type that holds the state as an input argument to the event function.
+but, if needed, a process can also share state directly between the Process Functions if needed, by giving it a state variable or struct type that holds the state as an input argument to the event function.
 
 Example:
 
 ```go
-// The 'c *Client' are defined in the Event Functions for both processes,
-// so both processes have access to the same memory area.
+// The 'c *Client' are defined with the Event Functions for both processes,
+// so both processes have access to the same shared memory area.
 
 func etHello(c *Client) actress.ETFunc {
 .......
