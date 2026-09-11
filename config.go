@@ -17,7 +17,7 @@ package actress
 
 import (
 	"flag"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 )
@@ -69,7 +69,8 @@ func CheckEnv[T any](key string, v T) any {
 	case int:
 		n, err := strconv.Atoi(val)
 		if err != nil {
-			log.Fatalf("error: failed to convert env to int: %v\n", n)
+			slog.Error("config CheckEnv", "failed to convert env to int", err)
+			os.Exit(1)
 		}
 		return n
 	case string:

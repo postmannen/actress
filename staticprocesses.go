@@ -390,7 +390,8 @@ func etPidFn(ctx context.Context, p *Process) func() {
 				action := pidAction(ev.Cmd[0])
 				pid, err := strconv.Atoi(ev.Cmd[1])
 				if err != nil {
-					log.Fatalf("etPidFn: failed to convert pid from string to int: %v\n", err)
+					slog.Error("etPidFn", "failed to convert pid from string to int", err)
+					continue
 				}
 				procName := ev.Cmd[2]
 
@@ -434,13 +435,15 @@ func ETReadFileFn(ctx context.Context, p *Process) func() {
 				go func() {
 					fh, err := os.Open(ev.Cmd[0])
 					if err != nil {
-						log.Fatalf("etReadFileFn: failed to open file: %v\n", err)
+						slog.Error("ETReadFileFn", "failed to open file", err)
+						return
 					}
 					defer fh.Close()
 
 					b, err := io.ReadAll(fh)
 					if err != nil {
-						log.Fatalf("etReadFileFn: failed to open file: %v\n", err)
+						slog.Error("ETReadFile", "readall failed", err)
+						return
 					}
 
 					nEv := ev.NextEvent

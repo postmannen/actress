@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -79,7 +80,8 @@ func main() {
 	// Start all the registered processes.
 	err := rootAct.Act()
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("main", "act on root failed", err)
+		os.Exit(1)
 	}
 
 	// Pass in an event destined for an ETTest1 EventType process, and also specify
