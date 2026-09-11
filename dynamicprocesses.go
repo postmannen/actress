@@ -50,12 +50,15 @@ func (p *dynamicProcesses) Add(et EventName, proc *Process) {
 }
 
 // Delete an Event and it's process from the processes map.
-func (p *dynamicProcesses) Delete(et EventName) {
+func (p *dynamicProcesses) Delete(en EventName) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	// p.procMap[et].Cancel()
-	delete(p.procMap, et)
-	log.Printf("deleted process %v\n", et)
+	proc, ok := p.procMap[en]
+	if ok {
+		delete(p.procMap, en)
+		proc.Cancel()
+		log.Printf("deleted process %v\n", en)
+	}
 }
 
 // Checks if the event is defined in the processes map, and returns true if it is.
@@ -127,7 +130,11 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 						slog.Debug("edRouterFn", "on", p.Config.NodeName, "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name)
 					}
 
-					dynP.InCh <- ev
+					select {
+					case dynP.InCh <- ev:
+					case <-ctx.Done():
+						return
+					}
 
 					// Done with the event, loop back, and continue with the next event.
 					continue
@@ -152,7 +159,10 @@ func edRouterFn(ctx context.Context, p *Process) func() {
 
 						// Process is now registred, so we can safely put
 						//the event on the InCh of the process.
-						dynP.InCh <- ev
+						select {
+						case dynP.InCh <- ev:
+						case <-ctx.Done():
+						}
 
 						return
 					}

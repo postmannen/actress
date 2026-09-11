@@ -46,12 +46,15 @@ func (p *customProcesses) Add(et EventName, proc *Process) {
 }
 
 // Delete an Event and it's process from the processes map.
-func (p *customProcesses) Delete(et EventName) {
+func (p *customProcesses) Delete(en EventName) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.procMap[et].Cancel()
-	delete(p.procMap, et)
-	log.Printf("deleted process %v\n", et)
+	proc, ok := p.procMap[en]
+	if ok {
+		delete(p.procMap, en)
+		proc.Cancel()
+		log.Printf("deleted process %v\n", en)
+	}
 }
 
 // Checks if the event is defined in the processes map, and returns true if it is.
@@ -102,14 +105,14 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 				// The checking is done in a go routine so the router don't block
 				// here waiting, and we continue with the next event in the queue.
 				p.CustomProcesses.mu.Lock()
-				_, ok := p.CustomProcesses.procMap[ev.Name]
+				procFromProcMap, ok := p.CustomProcesses.procMap[ev.Name]
 				p.CustomProcesses.mu.Unlock()
 				if !ok {
 					go func(ev Event) {
 						// Try to 3 times to deliver the message.
 						for i := 0; i < 3; i++ {
 							p.CustomProcesses.mu.Lock()
-							_, ok := p.CustomProcesses.procMap[ev.Name]
+							pfpm, ok := p.CustomProcesses.procMap[ev.Name]
 							p.CustomProcesses.mu.Unlock()
 
 							if !ok {
@@ -119,9 +122,8 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 
 							// Process is now registred, so we can safely put
 							//the event on the InCh of the process.
-							p.CustomProcesses.mu.Lock()
-							p.CustomProcesses.procMap[ev.Name].InCh <- ev
-							p.CustomProcesses.mu.Unlock()
+
+							pfpm.InCh <- ev
 
 							return
 						}
@@ -136,15 +138,11 @@ func ecRouterFn(ctx context.Context, p *Process) func() {
 
 				// Process was registered. Deliver the event to the process InCh.
 
-				p.CustomProcesses.mu.Lock()
-				inCh := p.CustomProcesses.procMap[ev.Name].InCh
-				p.CustomProcesses.mu.Unlock()
-
 				if slog.Default().Enabled(ctx, slog.LevelDebug) {
-					slog.Debug("ecRouterFn", "on", p.Config.NodeName, "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh)
+					slog.Debug("ecRouterFn", "on", p.Config.NodeName, "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", procFromProcMap.InCh)
 				}
 
-				inCh <- ev
+				procFromProcMap.InCh <- ev
 
 			case <-p.Ctx.Done():
 				if slog.Default().Enabled(ctx, slog.LevelDebug) {

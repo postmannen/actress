@@ -17,7 +17,6 @@ package actress
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -36,37 +35,54 @@ func (p *Process) addToProcessesMap() {
 		case 'T':
 			p.StaticProcesses.mu.Lock()
 			defer p.StaticProcesses.mu.Unlock()
-			if _, ok := p.StaticProcesses.procMap[p.Event]; ok {
-				p.StaticProcesses.procMap[p.Event].Cancel()
+			if procFromProcMap, ok := p.StaticProcesses.procMap[p.Event]; ok {
+				// If the there is already a root process with the same name
+				// present, return an error message, and do no further processing,
+				// since there should be only one root process with a given name.
+				if procFromProcMap.isRoot {
+					slog.Error("addToProcessMap", "on", p.Config.NodeName, "a root process with that name already exists, will not add one more, this should never happen, and will now exit", p.Event)
+					os.Exit(1)
+				}
+
+				// If it is just a normal process, we stop it, so a new one can replace it.
+				procFromProcMap.Stop()
 			}
+
 			p.StaticProcesses.procMap[p.Event] = p
+			return
 		case 'D':
 			p.DynamicProcesses.mu.Lock()
 			defer p.DynamicProcesses.mu.Unlock()
-			if _, ok := p.DynamicProcesses.procMap[p.Event]; ok {
-				p.DynamicProcesses.procMap[p.Event].Cancel()
+			if procFromProcMap, ok := p.DynamicProcesses.procMap[p.Event]; ok {
+				procFromProcMap.Stop()
 			}
+
 			p.DynamicProcesses.procMap[p.Event] = p
+			return
 		case 'C':
 			p.CustomProcesses.mu.Lock()
 			defer p.CustomProcesses.mu.Unlock()
-			if _, ok := p.CustomProcesses.procMap[p.Event]; ok {
-				p.CustomProcesses.procMap[p.Event].Cancel()
+			if procFromProcMap, ok := p.CustomProcesses.procMap[p.Event]; ok {
+				procFromProcMap.Stop()
 			}
 			p.CustomProcesses.procMap[p.Event] = p
+			return
 		case 'R':
-			if _, ok := p.ErrorProcesses.procMap[p.Event]; ok {
-				p.ErrorProcesses.procMap[p.Event].Cancel()
+			p.ErrorProcesses.mu.Lock()
+			defer p.ErrorProcesses.mu.Unlock()
+			if procFromProcMap, ok := p.ErrorProcesses.procMap[p.Event]; ok {
+				procFromProcMap.Stop()
 			}
 			p.ErrorProcesses.procMap[p.Event] = p
+			return
 		case 'S':
 			p.supervisorProcesses.mu.Lock()
 			defer p.supervisorProcesses.mu.Unlock()
-			if _, ok := p.supervisorProcesses.procMap[p.Event]; ok {
-				p.supervisorProcesses.procMap[p.Event].Cancel()
+			if procFromProcMap, ok := p.supervisorProcesses.procMap[p.Event]; ok {
+				procFromProcMap.Stop()
 			}
 			p.supervisorProcesses.procMap[p.Event] = p
-
+			return
 		}
 	}
 }
@@ -90,10 +106,15 @@ func (p *Process) deleteFromProcessesMap() {
 			delete(p.CustomProcesses.procMap, p.Event)
 			p.CustomProcesses.mu.Unlock()
 		case 'R':
-			// slog.Error("", "msg", fmt.Errorf("not allowed to delete error process"))
+			p.ErrorProcesses.mu.Lock()
+			delete(p.CustomProcesses.procMap, p.Event)
+			p.ErrorProcesses.mu.Unlock()
 		case 'S':
-			// slog.Error("", "msg", fmt.Errorf("not allowed to delete supervisor process"))
-
+			p.supervisorProcesses.mu.Lock()
+			delete(p.supervisorProcesses.procMap, p.Event)
+			p.supervisorProcesses.mu.Unlock()
+		default:
+			slog.Error("deleteFromProcessMap", "on", p.Config.NodeName, "process not T/D/C/R/S, this should never happen, and will now exit", p.Event)
 		}
 	}
 }
@@ -107,10 +128,26 @@ type pidToProc struct {
 	mp PidVsProcMap
 }
 
+// Create and return a new *pidToProc struct.
+func newPidToProc() *pidToProc {
+	p := pidToProc{
+		mp: make(PidVsProcMap),
+	}
+	return &p
+}
+
 // Is the main counter used for assigning Nr to events.
 type eventNr struct {
 	mu sync.Mutex
 	nr int
+}
+
+// Create and return a new *eventNr struct.
+// This function is normally used only when creatiing the root process.
+// The child processes will inherit the eventNr from the root process
+// when the newProcess function is called.
+func newEventNr(start int) *eventNr {
+	return &eventNr{nr: start}
 }
 
 // Add a pid and process to the map.
@@ -150,22 +187,6 @@ func (p *pidToProc) copyOfMap() *PidVsProcMap {
 	}
 
 	return &m
-}
-
-// Create and return a new *pidToProc struct.
-func newPidToProc() *pidToProc {
-	p := pidToProc{
-		mp: make(PidVsProcMap),
-	}
-	return &p
-}
-
-// Create and return a new *eventNr struct.
-// This function is normally used only when creatiing the root process.
-// The child processes will inherit the eventNr from the root process
-// when the newProcess function is called.
-func newEventNr(start int) *eventNr {
-	return &eventNr{nr: start}
 }
 
 type pids struct {
@@ -218,16 +239,13 @@ type Process struct {
 	SupervisorEventCh chan Event `json:"-"`
 	// The event type for the process.
 	Event EventName
-	// Maps for various staticProcess information.
-	// NB: Added a Mutex on this structure, though it should really not be needed,
-	//	since there is only reads from the static procMap. Decide later if we should
-	//	remove it again.
+	// Map for staticProcess information.
 	StaticProcesses *staticProcesses
 	// Map of dynamic processes
 	DynamicProcesses *dynamicProcesses
 	// Map of custom processes
 	CustomProcesses *customProcesses
-	// Maps for various errProcess information
+	// Map errProcess information
 	ErrorProcesses *errorProcesses
 	// Map of supervisor processes
 	supervisorProcesses *supervisorProcesses
@@ -354,7 +372,10 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config) *Process {
 	NewProcess(ctx, &p, ETExit, etExitFn).actForRoot(pi)
 	NewProcess(ctx, &p, ETPidGetAll, etPidGetAllFn).actForRoot(pi)
 
-	RegisterProcessesInESProcesses(&p, pi)
+	// TODO: As of now the supervisor is just an idea,
+	// 		 so I comment out this registering for later.
+	//
+	// RegisterProcessesInESProcesses(&p, pi)
 
 	return &p
 }
@@ -443,6 +464,15 @@ func NewProcess(ctx context.Context, parentP *Process, event EventName, fn ETFun
 // If the event is to be delivered to a remote node, AddEvent will also
 // take care of that and ship the event off to the ETRemote process.
 func (p *Process) AddEvent(event Event) {
+	// NOTE:
+	// The AddEvent can possibly block when delivering. Putting a buffer here can hide
+	// a problem elsewhere. For example a slow actor, or other. Will keep it as it is now,
+	// with potential block, and rather make changes if it becomes a problem.
+
+	if event.NextEvent != nil {
+		event.NextEvent = copyNextEventChain(event.NextEvent)
+	}
+
 	eventNr := p.IncrementEventNr()
 	event.Nr = eventNr
 
@@ -468,36 +498,45 @@ func (p *Process) AddEvent(event Event) {
 	// -------------------------------------------------------------
 	s := string(event.Name) // EventName is a string alias; this is a no-op if already string
 	if len(s) < 2 {
-		panic(fmt.Sprintf("unknown event.Name: %v", event.Name))
+		slog.Error("AddEvent", "unknown event.Name, to short, should be at least length of 2", event.Name)
+		return
 	}
 	if s[0] != 'E' { // all your kinds start with 'E'
-		panic(fmt.Sprintf("unknown event.Name, should start with E: %v", event.Name))
+		slog.Error("AddEvent", "unknown event.Name, should start with E", event.Name)
+		return
 	}
 	switch s[1] {
 	case 'T': // ET*
 		p.addEventStatic(event)
+		return
 	case 'R': // ER*
 		p.addEventError(event)
+		return
 	case 'D': // ED*
 		p.addEventDynamic(event)
+		return
 	case 'C': // EC*
 		p.addEventCustom(event)
+		return
 	case 'S': // ES*
 		p.addEventSuperVisor(event)
+		return
 	default:
-		panic(fmt.Sprintf("unknown event.Name, got default case, should start with E: %v", event.Name))
+		slog.Error("AddEvent", "unknown event.Name, got default case, should start with E", event.Name)
 	}
 }
 
 // Will add an event to be handled by the processes.
 func (p *Process) addEventSuperVisor(event Event) {
-	//if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
-	//	slog.Debug("addEventSuperVisor", "[1 of 2] on", p.Config.NodeName, "event", CopyEventFields(&event))
-	//}
-	p.SupervisorEventCh <- event
-	//if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
-	//	slog.Debug("addEventSuperVisor", "[2 of 2] on", p.Config.NodeName, "event", CopyEventFields(&event))
-	//}
+	select {
+	case p.SupervisorEventCh <- event:
+	default:
+		select {
+		case p.SupervisorEventCh <- event:
+		case <-time.After(time.Second * 5):
+			slog.Error("addEventSuperVisor", "TIMEOUT: reason...one of the later AddEvent commands probably are not working well. Check the debug output", event)
+		}
+	}
 }
 
 // Will add an event to be handled by the processes.
@@ -529,7 +568,16 @@ func (p *Process) addEventDynamic(event Event) {
 	//if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
 	//	slog.Debug("addEventDynamic", "[1 of 2] on", p.Config.NodeName, "event", CopyEventFields(&event))
 	//}
-	p.DynamicEventCh <- event
+	select {
+	case p.DynamicEventCh <- event:
+	default:
+		select {
+		case p.DynamicEventCh <- event:
+		case <-time.After(time.Second * 5):
+			slog.Error("addEventDynamic", "TIMEOUT: reason...one of the later AddEvent commands probably are not working well. Check the debug output", event)
+		}
+	}
+
 	//if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
 	//	slog.Debug("addEventDynamic", "[2 of 2] on", p.Config.NodeName, "event", CopyEventFields(&event))
 	//}
@@ -537,12 +585,29 @@ func (p *Process) addEventDynamic(event Event) {
 
 // Will add an event to be handled by the processes.
 func (p *Process) addEventCustom(event Event) {
-	p.CustomEventCh <- event
+	select {
+	case p.CustomEventCh <- event:
+	default:
+		select {
+		case p.CustomEventCh <- event:
+		case <-time.After(time.Second * 5):
+			slog.Error("addEventCustom", "TIMEOUT: reason...one of the later AddEvent commands probably are not working well. Check the debug output", event)
+		}
+	}
+
 }
 
 // Will add an error to be handled by the error processes.
 func (p *Process) addEventError(event Event) {
-	p.ErrorEventCh <- event
+	select {
+	case p.ErrorEventCh <- event:
+	default:
+		select {
+		case p.ErrorEventCh <- event:
+		case <-time.After(time.Second * 5):
+			slog.Error("addEventError", "TIMEOUT: reason...one of the later AddEvent commands probably are not working well. Check the debug output", event)
+		}
+	}
 }
 
 // Act will start the ETFunc attached to the process.

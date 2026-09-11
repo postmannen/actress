@@ -16,9 +16,9 @@
 package actress
 
 import (
-	"fmt"
+	"context"
 	"io"
-	"log"
+	"log/slog"
 )
 
 type EventRW struct {
@@ -43,34 +43,31 @@ func NewEventRW(p *Process, ev *Event, info string) *EventRW {
 // Write the data into Event.Data, and put the event into the StaticEventCh to be processed.
 func (m *EventRW) Write(b []byte) (int, error) {
 
-	fmt.Printf(" *2 DEBUG WRITE: ev nr: %v, info: %v , name: %v, PREPARING for Writing to erw, len(b): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.
-		Name, len(b), string(b))
-
-	if len(b) > 0 {
-		ev := m.Ev
-		ev.Data = b
-
-		m.P.AddEvent(*ev)
-		fmt.Printf(" *2 DEBUG WRITE: ev nr: %v, info: %v , name: %v, DONE Writing to erw, len(b): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.
-			Name, len(b), string(b))
+	if len(b) == 0 {
+		return 0, nil
 	}
 
-	log.Printf("%v, len: %v when writing, not adding an event\n", m.Info, len(b))
+	if len(b) > 0 {
+		ev := *m.Ev
+		// Create a deep copy of the byte slice
+		ev.Data = append([]byte{}, b...)
+
+		m.P.AddEvent(ev)
+	}
+
+	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		slog.Debug("EventRW.Write", "info", m.Info, "len b", len(b))
+	}
 	return len(b), nil
 }
 
 // Read the data into b.
 func (m *EventRW) Read(b []byte) (int, error) {
 	if m.Pos >= len(m.Ev.Data) {
-		fmt.Printf(" *1 DEBUG READ: ev nr: %v, info: %v, name: %v, EOF reading from erw, len(m.ev.Data): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.Name, len(m.Ev.Data), string(m.Ev.Data))
 		return 0, io.EOF
 	}
 
-	fmt.Printf(" *1 DEBUG READ: ev nr: %v, info: %v, name: %v, PREPARING reading from erw, len(m.ev.Data): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.Name, len(m.Ev.Data), string(m.Ev.Data))
-
 	n := copy(b, m.Ev.Data[m.Pos:])
-
-	fmt.Printf(" *1 DEBUG READ: ev nr: %v, info: %v, name: %v, DONE reading from erw, len(m.ev.Data): %v, %v\n", m.Ev.Nr, m.Info, m.Ev.Name, len(m.Ev.Data), string(m.Ev.Data))
 
 	m.Pos += n
 	return n, nil

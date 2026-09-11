@@ -17,10 +17,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/postmannen/actress"
 )
 
@@ -31,7 +31,6 @@ func main() {
 	// Create a new root process.
 	cfg, _ := actress.NewConfig("debug")
 	rootAct := actress.NewRootProcess(ctx, nil, cfg)
-	rootAct.Act()
 
 	// Start all the registered actors.
 	err := rootAct.Act()
@@ -48,7 +47,7 @@ func main() {
 
 	ev := <-rootAct.TestCh
 	tmpProc := make(actress.PidVsProcMap)
-	err = json.Unmarshal(ev.Data, &tmpProc)
+	err = cbor.Unmarshal(ev.Data, &tmpProc)
 	if err != nil {
 		log.Fatal(err)
 	}

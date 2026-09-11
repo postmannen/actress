@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/fxamacker/cbor/v2"
 )
@@ -36,35 +37,36 @@ func esRouterFn(ctx context.Context, p *Process) func() {
 		for {
 			select {
 			case ev := <-p.SupervisorEventCh:
-				// If there is a next event defined, we make a copy of all the fields  of the current event,
-				// and put that as the previousEvent on the next event. We can use this information later
-				// if need to check something in the previous event.
-				if ev.NextEvent != nil {
-					// Keep the information about the current event, so we are able to check for things
-					// like ackTimeout and what node to reply back to if ack should be given.
-					ev.NextEvent.PreviousEvent = CopyEventFields(&ev)
-				}
+				func() {
+					// If there is a next event defined, we make a copy of all the fields  of the current event,
+					// and put that as the previousEvent on the next event. We can use this information later
+					// if need to check something in the previous event.
+					if ev.NextEvent != nil {
+						// Keep the information about the current event, so we are able to check for things
+						// like ackTimeout and what node to reply back to if ack should be given.
+						ev.NextEvent.PreviousEvent = CopyEventFields(&ev)
+					}
 
-				// Check if process is registred and valid.
-				p.supervisorProcesses.mu.Lock()
-				_, ok := p.supervisorProcesses.procMap[ev.Name]
-				p.supervisorProcesses.mu.Unlock()
+					// Check if process is registred and valid.
+					p.supervisorProcesses.mu.Lock()
+					procFromProcMap, procMapValueOK := p.supervisorProcesses.procMap[ev.Name]
+					p.supervisorProcesses.mu.Unlock()
 
-				if !ok {
-					slog.Error("esRouterFn", "on", p.Config.NodeName, "found no process registered for the event type", ev.Name)
-				}
+					if !procMapValueOK {
+						slog.Error("esRouterFn", "on", p.Config.NodeName, "found no process registered for the event type", ev.Name)
+						return
+					}
 
-				// // Process was registered. Deliver the event to the process InCh.
-
-				p.supervisorProcesses.mu.Lock()
-				inCh := p.supervisorProcesses.procMap[ev.Name].InCh
-				p.supervisorProcesses.mu.Unlock()
-
-				if slog.Default().Enabled(ctx, slog.LevelDebug) {
-					slog.Debug("esRouterFn", "on", p.Config.NodeName, "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh)
-				}
-
-				inCh <- ev
+					select {
+					case procFromProcMap.InCh <- ev:
+					default:
+						select {
+						case procFromProcMap.InCh <- ev:
+						case <-time.After(time.Second * 5):
+							slog.Debug("esRouterFn", "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", procFromProcMap.InCh, "error", "timed out trying to deliver the event on the inch of the er process")
+						}
+					}
+				}()
 
 			case <-p.Ctx.Done():
 				if slog.Default().Enabled(ctx, slog.LevelDebug) {

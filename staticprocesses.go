@@ -77,6 +77,7 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 					if ev.Name == ETRemote {
 						if !procMapValueOK {
 							slog.Error("etRouterFn", "on", p.Config.NodeName, "found no process registered for the event type ETRemote, and you need to register an ETFunc for how to handle remote connections with the EventName ", ev.Name)
+							return
 						}
 					}
 					if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
@@ -116,7 +117,11 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 						slog.Debug("etRouterFn", "event nr", ev.Nr, "before putting event on process InCh", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh)
 						slog.Debug("etRouterFn", "nextEvent", CopyEventFields(ev.NextEvent))
 					}
-					inCh <- ev
+
+					select {
+					case inCh <- ev:
+					case <-ctx.Done():
+					}
 
 					if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
 						slog.Debug("etRouterFn", "event nr", ev.Nr, "after routing event to process InCh", CopyEventFields(&ev))
@@ -155,6 +160,19 @@ func CopyEventFields(ev *Event) *Event {
 		SrcNode:     ev.SrcNode,
 	}
 
+	return &e
+}
+
+// copyEventChain returns a copy of ev with its NextEvent chain
+// deep-copied node by node, so each caller owns its own chain and
+// routers/handlers may mutate it without racing
+func copyNextEventChain(ev *Event) *Event {
+	if ev == nil {
+		return nil
+	}
+
+	e := *ev
+	e.NextEvent = copyNextEventChain(ev.NextEvent)
 	return &e
 }
 
@@ -284,15 +302,15 @@ const ETDone EventName = "ETDone"
 
 func etDoneFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		p.SignalReady()
+
 		for {
-			p.SignalReady()
-
-			d := <-p.InCh
-
-			go func() {
-				slog.Info("etDoneFn", "got event ETDone", string(d.Data))
-				slog.Error("etDoneFn", "got etDone, on", p.Config.NodeName)
-			}()
+			select {
+			case ev := <-p.InCh:
+				slog.Info("etDoneFn", "got event ETDone", string(ev.Data))
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 
@@ -386,10 +404,10 @@ func etPidFn(ctx context.Context, p *Process) func() {
 
 				case pidGetAll:
 					pidProcMap := p.pids.toProc.copyOfMap()
-					for pid, procName := range *pidProcMap {
+					for pid, proc := range *pidProcMap {
 						p.AddEvent(
 							Event{Name: ev.NextEvent.Name,
-								Data: fmt.Appendf([]byte{}, "pid: %v, process name: %v", pid, procName)})
+								Data: fmt.Appendf([]byte{}, "pid: %v, process name: %v", pid, proc.Event)})
 					}
 				}
 

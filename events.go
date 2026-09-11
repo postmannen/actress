@@ -37,7 +37,7 @@ import (
 //     for this to work. Check out the examples folder for a simple
 //     example for how it could be implemented.
 type Event struct {
-	Nr int
+	Nr int `json:"nr" yaml:"nr" cbor:"nr"`
 	// Name is a unique name to identify the type of the event.
 	Name EventName `json:"name" yaml:"name" cbor:"name"`
 	// Cmd is usually used for giving instructions or parameters for
@@ -46,7 +46,7 @@ type Event struct {
 	// Instruction got the underlying type of string. This field can
 	// be used to give for example an instruction of a single word.
 	// For example in switch statements at the receiving actor, or other.
-	Instruction Instruction
+	Instruction Instruction `json:"instruction" yaml:"instruction" cbor:"instruction"`
 	// Data usually carries the data from one process to the next. Example
 	// could be a file read on process1 is put in the Data field, and
 	// passed on to process2 to be unmarshaled.

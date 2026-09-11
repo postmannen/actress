@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -27,6 +29,7 @@ import (
 // who belongs to what event, and also a map of the started
 // processes.
 type errorProcesses struct {
+	mu      sync.Mutex
 	procMap map[EventName]*Process
 }
 
@@ -64,22 +67,42 @@ func erRouterFn(ctx context.Context, p *Process) func() {
 
 		for {
 			select {
-			case e := <-p.ErrorEventCh:
-				// If there is a next event defined, we make a copy of all the fields  of the current event,
-				// and put that as the previousEvent on the next event. We can use this information later
-				// if need to check something in the previous event.
-				if e.NextEvent != nil {
-					// Keep the information about the current event, so we are able to check for things
-					// like ackTimeout and what node to reply back to if ack should be given.
-					e.NextEvent.PreviousEvent = CopyEventFields(&e)
-				}
+			case ev := <-p.ErrorEventCh:
+				go func() {
+					p.ErrorProcesses.mu.Lock()
+					procFromProcMap, procMapValueOK := p.ErrorProcesses.procMap[ev.Name]
+					p.ErrorProcesses.mu.Unlock()
 
-				inCh := p.ErrorProcesses.procMap[e.Name].InCh
+					if !procMapValueOK {
+						slog.Error("erRouterFn", "on", p.Config.NodeName, "found no process registered for the event type, returning and not handling event", ev.Name)
+						return
+					}
 
-				if slog.Default().Enabled(ctx, slog.LevelDebug) {
-					slog.Debug("erRouterFn", "Routing event", p.Event, "node", p.Config.NodeName, "name", e.Name, "Inch", inCh)
-				}
-				inCh <- e
+					// If there is a next event defined, we make a copy of all the fields  of the current event,
+					// and put that as the previousEvent on the next event. We can use this information later
+					// if need to check something in the previous event.
+					if ev.NextEvent != nil {
+						// Keep the information about the current event, so we are able to check for things
+						// like ackTimeout and what node to reply back to if ack should be given.
+						ev.NextEvent.PreviousEvent = CopyEventFields(&ev)
+					}
+
+					inCh := procFromProcMap.InCh
+
+					if slog.Default().Enabled(ctx, slog.LevelDebug) {
+						slog.Debug("erRouterFn", "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh)
+					}
+
+					select {
+					case inCh <- ev:
+					default:
+						select {
+						case inCh <- ev:
+						case <-time.After(time.Second * 5):
+							slog.Debug("erRouterFn", "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh, "error", "timed out trying to deliver the event on the inch of the er process")
+						}
+					}
+				}()
 
 			case <-p.Ctx.Done():
 				if slog.Default().Enabled(ctx, slog.LevelDebug) {
