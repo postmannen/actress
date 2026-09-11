@@ -61,7 +61,7 @@ const ETRouter EventName = "ETRouter"
 func etRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		defer func() {
-			// fmt.Printf("STOPPED ETRouter!!!")
+			slog.Info("etRouter", "stopped etRouter", "")
 			p.Stop()
 		}()
 
