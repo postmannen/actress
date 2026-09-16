@@ -3,81 +3,16 @@ package actress
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/fxamacker/cbor/v2"
 )
 
 // ------------------------------------------------------------------------------
-// Events and event functions, ESRouter
+// Events and event functions
 // ------------------------------------------------------------------------------
 
 // ESRouter for supervisor events.
 const ESRouter EventName = "ESRouter"
-
-// Process function for routing and handling supervisor events. Will check
-// and route the event to the correct process.
-func esRouterFn(ctx context.Context, p *Process) func() {
-	fn := func() {
-
-		// The inch is not used for this function, so we set up a
-		// listener that logs info so the user can detect the error.
-		go func() {
-			for {
-				select {
-				case ev := <-p.InCh:
-					slog.Error("an even was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
-				case <-ctx.Done():
-				}
-			}
-		}()
-
-		for {
-			select {
-			case ev := <-p.SupervisorEventCh:
-				func() {
-					// If there is a next event defined, we make a copy of all the fields  of the current event,
-					// and put that as the previousEvent on the next event. We can use this information later
-					// if need to check something in the previous event.
-					if ev.NextEvent != nil {
-						// Keep the information about the current event, so we are able to check for things
-						// like ackTimeout and what node to reply back to if ack should be given.
-						ev.NextEvent.PreviousEvent = CopyEventFields(&ev)
-					}
-
-					// Check if process is registred and valid.
-					p.supervisorProcesses.mu.Lock()
-					procFromProcMap, procMapValueOK := p.supervisorProcesses.procMap[ev.Name]
-					p.supervisorProcesses.mu.Unlock()
-
-					if !procMapValueOK {
-						slog.Error("esRouterFn", "on", p.Config.NodeName, "found no process registered for the event type", ev.Name)
-						return
-					}
-
-					select {
-					case procFromProcMap.InCh <- ev:
-					default:
-						select {
-						case procFromProcMap.InCh <- ev:
-						case <-time.After(time.Second * 5):
-							slog.Debug("esRouterFn", "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", procFromProcMap.InCh, "error", "timed out trying to deliver the event on the inch of the er process")
-						}
-					}
-				}()
-
-			case <-p.Ctx.Done():
-				if slog.Default().Enabled(ctx, slog.LevelDebug) {
-					slog.Debug("esRouterFn", "got ctx.Done, on", p.Config.NodeName)
-				}
-
-				return
-			}
-		}
-	}
-
-	return fn
-}
 
 // ------------------------------------------------------------------------------
 // Events and event functions, Process handling

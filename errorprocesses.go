@@ -20,79 +20,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"time"
 	"unsafe"
 )
 
 // ERRouter for error events.
 const ERRouter EventName = "ERRouter"
-
-// Process function for routing and handling events.
-func erRouterFn(ctx context.Context, p *Process) func() {
-	fn := func() {
-		// The inch is not used for this function, so we set up a
-		// listener that logs info so the user can detect the error.
-		go func() {
-			for {
-				select {
-				case ev := <-p.InCh:
-					slog.Error("an even was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
-				case <-ctx.Done():
-				}
-			}
-		}()
-
-		for {
-			select {
-			case ev := <-p.ErrorEventCh:
-				go func() {
-					p.ErrorProcesses.mu.Lock()
-					procFromProcMap, procMapValueOK := p.ErrorProcesses.procMap[ev.Name]
-					p.ErrorProcesses.mu.Unlock()
-
-					if !procMapValueOK {
-						slog.Error("erRouterFn", "on", p.Config.NodeName, "found no process registered for the event type, returning and not handling event", ev.Name)
-						return
-					}
-
-					// If there is a next event defined, we make a copy of all the fields  of the current event,
-					// and put that as the previousEvent on the next event. We can use this information later
-					// if need to check something in the previous event.
-					if ev.NextEvent != nil {
-						// Keep the information about the current event, so we are able to check for things
-						// like ackTimeout and what node to reply back to if ack should be given.
-						ev.NextEvent.PreviousEvent = CopyEventFields(&ev)
-					}
-
-					inCh := procFromProcMap.InCh
-
-					if slog.Default().Enabled(ctx, slog.LevelDebug) {
-						slog.Debug("erRouterFn", "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh)
-					}
-
-					select {
-					case inCh <- ev:
-					default:
-						select {
-						case inCh <- ev:
-						case <-time.After(time.Second * 5):
-							slog.Debug("erRouterFn", "Routing event", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh, "error", "timed out trying to deliver the event on the inch of the er process")
-						}
-					}
-				}()
-
-			case <-p.Ctx.Done():
-				if slog.Default().Enabled(ctx, slog.LevelDebug) {
-					slog.Debug("erRouterFn", "got ctx.Done, on", p.Config.NodeName)
-				}
-
-				return
-			}
-		}
-	}
-
-	return fn
-}
 
 // InstructionError for error logging.
 const InstructionError Instruction = "InstructionError"
