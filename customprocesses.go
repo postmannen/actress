@@ -17,64 +17,8 @@ package actress
 
 import (
 	"context"
-	"log"
 	"log/slog"
-	"sync"
 )
-
-// Holds information about what process functions who belongs to what
-// event, and also a map of the started processes.
-type customProcesses struct {
-	procMap map[EventName]*Process
-	mu      sync.Mutex
-}
-
-// Add a new Event and it's process to the processes map.
-//
-// *******************************************************************
-// TODO: Consider if we still need this function. It is not in use.
-// *******************************************************************
-func (p *customProcesses) Add(et EventName, proc *Process) {
-	// Check if a process for the same event is defined, and if so we
-	// cancel the current process before we replace it with a new one.
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if _, ok := p.procMap[et]; ok {
-		p.procMap[et].Cancel()
-	}
-	p.procMap[et] = proc
-}
-
-// Delete an Event and it's process from the processes map.
-func (p *customProcesses) Delete(en EventName) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	proc, ok := p.procMap[en]
-	if ok {
-		delete(p.procMap, en)
-		proc.Cancel()
-		log.Printf("deleted process %v\n", en)
-	}
-}
-
-// Checks if the event is defined in the processes map, and returns true if it is.
-func (p *customProcesses) IsEventDefined(ev EventName) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if _, ok := p.procMap[ev]; !ok {
-		return false
-	}
-
-	return true
-}
-
-// Prepare and return a new *customProcesses structure.
-func newCustomProcesses() *customProcesses {
-	p := customProcesses{
-		procMap: make(map[EventName]*Process),
-	}
-	return &p
-}
 
 // ------------------------------------------------------------------------------
 // Events and event functions.
@@ -87,6 +31,18 @@ const ECRouter EventName = "ECRouter"
 // and route the event to the correct process.
 func ecRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		// The inch is not used for this function, so we set up a
+		// listener that logs info so the user can detect the error.
+		go func() {
+			for {
+				select {
+				case ev := <-p.InCh:
+					slog.Error("an even was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
+				case <-ctx.Done():
+				}
+			}
+		}()
+
 		for {
 			select {
 			case ev := <-p.CustomEventCh:

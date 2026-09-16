@@ -20,43 +20,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"sync"
 	"time"
 	"unsafe"
 )
-
-// processes holds information about what process functions
-// who belongs to what event, and also a map of the started
-// processes.
-type errorProcesses struct {
-	mu      sync.Mutex
-	procMap map[EventName]*Process
-}
-
-// // Delete an Event and it's process from the processes map.
-// func (p *processes) delete(et Name, proc *Process) {
-// 	p.mu.Lock()
-// 	defer p.mu.Unlock()
-// 	p.procMap[et].cancel()
-// 	delete(p.procMap, et)
-// }
-
-// Checks if the event is defined in the processes map, and returns true if it is.
-func (p *errorProcesses) IsEventDefined(ev EventName) bool {
-	if _, ok := p.procMap[ev]; !ok {
-		return false
-	}
-
-	return true
-}
-
-// Prepare and return a new *processes structure.
-func newErrorProcesses() *errorProcesses {
-	p := errorProcesses{
-		procMap: make(map[EventName]*Process),
-	}
-	return &p
-}
 
 // ERRouter for error events.
 const ERRouter EventName = "ERRouter"
@@ -64,6 +30,17 @@ const ERRouter EventName = "ERRouter"
 // Process function for routing and handling events.
 func erRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		// The inch is not used for this function, so we set up a
+		// listener that logs info so the user can detect the error.
+		go func() {
+			for {
+				select {
+				case ev := <-p.InCh:
+					slog.Error("an even was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
+				case <-ctx.Done():
+				}
+			}
+		}()
 
 		for {
 			select {

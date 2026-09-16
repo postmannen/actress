@@ -3,24 +3,10 @@ package actress
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
 )
-
-type supervisorProcesses struct {
-	mu      sync.Mutex
-	procMap map[EventName]*Process
-}
-
-// Prepare and return a new *processes structure.
-func newsuperVisorProcesses() *supervisorProcesses {
-	p := supervisorProcesses{
-		procMap: make(map[EventName]*Process),
-	}
-	return &p
-}
 
 // ------------------------------------------------------------------------------
 // Events and event functions, ESRouter
@@ -33,6 +19,18 @@ const ESRouter EventName = "ESRouter"
 // and route the event to the correct process.
 func esRouterFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+
+		// The inch is not used for this function, so we set up a
+		// listener that logs info so the user can detect the error.
+		go func() {
+			for {
+				select {
+				case ev := <-p.InCh:
+					slog.Error("an even was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
+				case <-ctx.Done():
+				}
+			}
+		}()
 
 		for {
 			select {

@@ -107,7 +107,7 @@ func (p *Process) deleteFromProcessesMap() {
 			p.CustomProcesses.mu.Unlock()
 		case 'R':
 			p.ErrorProcesses.mu.Lock()
-			delete(p.CustomProcesses.procMap, p.Event)
+			delete(p.ErrorProcesses.procMap, p.Event)
 			p.ErrorProcesses.mu.Unlock()
 		case 'S':
 			p.supervisorProcesses.mu.Lock()
@@ -240,15 +240,15 @@ type Process struct {
 	// The event type for the process.
 	Event EventName
 	// Map for staticProcess information.
-	StaticProcesses *staticProcesses
+	StaticProcesses *processes
 	// Map of dynamic processes
-	DynamicProcesses *dynamicProcesses
+	DynamicProcesses *processes
 	// Map of custom processes
-	CustomProcesses *customProcesses
+	CustomProcesses *processes
 	// Map errProcess information
-	ErrorProcesses *errorProcesses
+	ErrorProcesses *processes
 	// Map of supervisor processes
-	supervisorProcesses *supervisorProcesses
+	supervisorProcesses *processes
 	// The main counter used for assigning Nr to events.
 	EventNr *eventNr
 	// Is this the root process.
@@ -317,11 +317,11 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config) *Process {
 		CustomEventCh:       make(chan Event, 10),
 		SupervisorEventCh:   make(chan Event, 10),
 		Event:               ETRoot,
-		StaticProcesses:     newStaticProcesses(),
-		DynamicProcesses:    newDynamicProcesses(),
-		CustomProcesses:     newCustomProcesses(),
-		ErrorProcesses:      newErrorProcesses(),
-		supervisorProcesses: newsuperVisorProcesses(),
+		StaticProcesses:     newProcesses(),
+		DynamicProcesses:    newProcesses(),
+		CustomProcesses:     newProcesses(),
+		ErrorProcesses:      newProcesses(),
+		supervisorProcesses: newProcesses(),
 		EventNr:             newEventNr(0),
 		isRoot:              true,
 		Config:              conf,
@@ -354,11 +354,31 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config) *Process {
 	NewProcess(ctx, &p, ERNone, erNoneFn).actForRoot(pi)
 	NewProcess(ctx, &p, ETPrint, etPrintFn).actForRoot(pi)
 
-	NewProcess(ctx, &p, ETRouter, etRouterFn).actForRoot(pi)
-	NewProcess(ctx, &p, ERRouter, erRouterFn).actForRoot(pi)
-	NewProcess(ctx, &p, EDRouter, edRouterFn).actForRoot(pi)
-	NewProcess(ctx, &p, ECRouter, ecRouterFn).actForRoot(pi)
-	NewProcess(ctx, &p, ESRouter, esRouterFn).actForRoot(pi)
+	{
+		p := NewProcess(ctx, &p, ETRouter, nil)
+		p.fn = eventRouterFn(p.StaticProcesses, p.StaticEventCh)(ctx, p)
+		p.Act()
+	}
+	{
+		p := NewProcess(ctx, &p, ERRouter, nil)
+		p.fn = eventRouterFn(p.ErrorProcesses, p.ErrorEventCh)(ctx, p)
+		p.Act()
+	}
+	{
+		p := NewProcess(ctx, &p, EDRouter, nil)
+		p.fn = eventRouterFn(p.DynamicProcesses, p.DynamicEventCh)(ctx, p)
+		p.Act()
+	}
+	{
+		p := NewProcess(ctx, &p, ECRouter, nil)
+		p.fn = eventRouterFn(p.CustomProcesses, p.CustomEventCh)(ctx, p)
+		p.Act()
+	}
+	{
+		p := NewProcess(ctx, &p, ESRouter, nil)
+		p.fn = eventRouterFn(p.supervisorProcesses, p.SupervisorEventCh)(ctx, p)
+		p.Act()
+	}
 
 	NewProcess(ctx, &p, ESProcesses, esProcessesFn()).actForRoot(pi)
 
@@ -507,18 +527,23 @@ func (p *Process) AddEvent(event Event) {
 	}
 	switch s[1] {
 	case 'T': // ET*
+		event.EventType = Static
 		p.addEventStatic(event)
 		return
 	case 'R': // ER*
+		event.EventType = Error
 		p.addEventError(event)
 		return
 	case 'D': // ED*
+		event.EventType = Dynamic
 		p.addEventDynamic(event)
 		return
 	case 'C': // EC*
+		event.EventType = Custom
 		p.addEventCustom(event)
 		return
 	case 'S': // ES*
+		event.EventType = Supervisor
 		p.addEventSuperVisor(event)
 		return
 	default:

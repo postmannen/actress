@@ -10,17 +10,20 @@ import (
 	"os/signal"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/fxamacker/cbor/v2"
 )
 
-type staticProcesses struct {
+type processes struct {
 	procMap map[EventName]*Process
 	mu      sync.Mutex
 }
 
 // Checks if the event is defined in the processes map, and returns true if it is.
-func (p *staticProcesses) IsEventDefined(ev EventName) bool {
+func (p *processes) IsEventDefined(ev EventName) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if _, ok := p.procMap[ev]; !ok {
 		return false
 	}
@@ -28,9 +31,21 @@ func (p *staticProcesses) IsEventDefined(ev EventName) bool {
 	return true
 }
 
+// Delete an Event and it's process from the processes map.
+func (p *processes) Delete(en EventName) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	proc, ok := p.procMap[en]
+	if ok {
+		delete(p.procMap, en)
+		proc.Cancel()
+		log.Printf("deleted process %v\n", en)
+	}
+}
+
 // Prepare and return a new *processes structure.
-func newStaticProcesses() *staticProcesses {
-	p := staticProcesses{
+func newProcesses() *processes {
+	p := processes{
 		procMap: make(map[EventName]*Process),
 	}
 	return &p
@@ -58,11 +73,169 @@ const ETRouter EventName = "ETRouter"
 
 // Process function for routing and handling events. Will check
 // and route the event to the correct process.
-func etRouterFn(ctx context.Context, p *Process) func() {
+func eventRouterFn(processes *processes, eventCh chan Event) ETFunc {
+	fn2 := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			defer func() {
+				slog.Info("etRouter", "stopped etRouter", "")
+				p.Stop()
+			}()
+
+			// The inch is not used for this function, so we set up a
+			// listener that logs info so the user can detect the error.
+			go func() {
+				for {
+					select {
+					case ev := <-p.InCh:
+						slog.Error("an even was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
+					case <-ctx.Done():
+					}
+				}
+			}()
+
+			// How long to wait for a stuck delivery from router
+			const deliveryTimeout = time.Second * 3
+			deliveryTimer := time.NewTimer(deliveryTimeout)
+
+			for {
+				select {
+				case ev := <-eventCh:
+
+					func(ev Event) {
+						processes.mu.Lock()
+						procFromProcMap, procMapValueOK := processes.procMap[ev.Name]
+						processes.mu.Unlock()
+
+						if ev.Name == ETRemote {
+							if !procMapValueOK {
+								slog.Error("etRouterFn", "on", p.Config.NodeName, "found no process registered for the event type ETRemote, and you need to register an ETFunc for how to handle remote connections with the EventName ", ev.Name)
+								return
+							}
+						}
+
+						// If there is a next event defined, we make a copy of all the fields  of the current event,
+						// and put that as the previousEvent on the next event. We can use this information later
+						// if need to check something in the previous event.
+						if ev.NextEvent != nil {
+							// Keep the information about the current event, so we are able to check for things
+							// like ackTimeout and what node to reply back to if ack should be given.
+							ev.NextEvent.PreviousEvent = CopyEventFields(&ev)
+						}
+
+						// Check if process is registred and valid.
+						// if procMapValueOK && procFromProcMap != nil {
+						if procMapValueOK {
+							// If the the receiving actor is ready to receive,
+							// we deliver it directly.
+							// If the the receiving actor is busy, we hit the
+							// default, and do the select below this one.
+							select {
+							case procFromProcMap.InCh <- ev:
+								return
+
+							default:
+							}
+						}
+
+						deliveryTimer.Reset(deliveryTimeout)
+
+						// Same as above, we try to deliver. If unable to deliver
+						// it will wait up the time of the delivery timer is reached,
+						// and then stop trying to deliver the event, and log it.
+						//
+						// Before we enter the select and retry to deliver, we check
+						// that the process we found is not nil. If it is nil it is
+						// a dynamic or custom process, and we enter the go routine
+						// after this if block that will wait and check if it appears,
+						// and then delivers the message.
+						if procFromProcMap != nil {
+							select {
+							case procFromProcMap.InCh <- ev:
+								deliveryTimer.Stop()
+								return
+							case <-ctx.Done():
+								deliveryTimer.Stop()
+								return
+							case <-deliveryTimer.C:
+								// If it is not a dynamic or custom event type we return.
+								// If it is dynamic or custom it will continue with check for
+								// process not registered further down below.
+								if ev.EventType == Static || ev.EventType == Error || ev.EventType == Supervisor {
+									slog.Error("etRouterFn", "on", p.Config.NodeName, "timeout reached when trying to deliver the event, returning and not handling event", ev.Name)
+									return
+								}
+							}
+						}
+
+						slog.Error("etRouterFn", "on", p.Config.NodeName, "found no process registered for the event type, returning and not handling event", ev.Name)
+
+						// The process was not registered. Wait a bit and check if it is just
+						// taking some time to start.
+						go func(ev Event) {
+							// Try to 3 times to deliver the message.
+							for i := 0; i < 3; i++ {
+								slog.Error("eventRouterFn", "on", p.Config.NodeName, "found no process registered for the event type", ev.Name, "ev.DstNode", ev.DstNode)
+								time.Sleep(time.Second * 1)
+
+								processes.mu.Lock()
+								procFromMap, ok := processes.procMap[ev.Name]
+								processes.mu.Unlock()
+
+								if !ok {
+									// process not found yet, loop again
+									continue
+								}
+
+								// Process is now registred, so we can safely put
+								//the event on the InCh of the process.
+								select {
+								case procFromMap.InCh <- ev:
+								case <-ctx.Done():
+								default:
+									slog.Error("eventRouterFn", "on", p.Config.NodeName, "process found registered for the event type, but channel seems blocked, discarding event", ev.Name, "ev.DstNode", ev.DstNode)
+								}
+
+								return
+							}
+						}(ev)
+
+					}(ev)
+
+				case <-p.Ctx.Done():
+					if slog.Default().Enabled(ctx, slog.LevelDebug) {
+						slog.Debug("etRouterFn", "got ctx.Done, on", p.Config.NodeName)
+					}
+
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	return fn2
+}
+
+// Process function for routing and handling events. Will check
+// and route the event to the correct process.
+func etRouter2Fn(ctx context.Context, p *Process) func() {
 	fn := func() {
 		defer func() {
 			slog.Info("etRouter", "stopped etRouter", "")
 			p.Stop()
+		}()
+
+		// The inch is not used for this function, so we set up a
+		// listener that logs info so the user can detect the error.
+		go func() {
+			for {
+				select {
+				case ev := <-p.InCh:
+					slog.Error("an even was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
+				case <-ctx.Done():
+				}
+			}
 		}()
 
 		for {
@@ -80,9 +253,7 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 							return
 						}
 					}
-					if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
-						slog.Debug("etRouterFn", "event nr", ev.Nr, "received on StaticEventCh on", CopyEventFields(&ev))
-					}
+
 					// If there is a next event defined, we make a copy of all the fields  of the current event,
 					// and put that as the previousEvent on the next event. We can use this information later
 					// if need to check something in the previous event.
@@ -92,18 +263,10 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 						ev.NextEvent.PreviousEvent = CopyEventFields(&ev)
 					}
 
-					if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
-						slog.Debug("etRouterFn", "event nr", ev.Nr, "after CopyEventFields on", CopyEventFields(&ev))
-					}
-
 					// Check if process is registred and valid.
 					if !procMapValueOK {
 						slog.Error("etRouterFn", "on", p.Config.NodeName, "found no process registered for the event type, returning and not handling event", ev.Name)
 						return
-					}
-
-					if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
-						slog.Debug("etRouterFn", "event nr", ev.Nr, "after checking if process is registred in procMap", CopyEventFields(&ev))
 					}
 
 					if procFromProcMap == nil {
@@ -112,20 +275,11 @@ func etRouterFn(ctx context.Context, p *Process) func() {
 					}
 					inCh := procFromProcMap.InCh
 
-					if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
-						slog.Debug("etRouterFn", "event nr", ev.Nr, "after getting the process InCh from procMap", CopyEventFields(&ev))
-						slog.Debug("etRouterFn", "event nr", ev.Nr, "before putting event on process InCh", p.Event, "node", p.Config.NodeName, "name", ev.Name, "Inch", inCh)
-						slog.Debug("etRouterFn", "nextEvent", CopyEventFields(ev.NextEvent))
-					}
-
 					select {
 					case inCh <- ev:
 					case <-ctx.Done():
 					}
 
-					if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
-						slog.Debug("etRouterFn", "event nr", ev.Nr, "after routing event to process InCh", CopyEventFields(&ev))
-					}
 				}(ev)
 
 			case <-p.Ctx.Done():
@@ -182,6 +336,18 @@ const ETOsSignal EventName = "ETOsSignal"
 // Process function for handling CTRL+C pressed.
 func etOsSignalFn(ctx context.Context, p *Process) func() {
 	fn := func() {
+		// The inch is not used for this function, so we set up a
+		// listener that logs info so the user can detect the error.
+		go func() {
+			for {
+				select {
+				case ev := <-p.InCh:
+					slog.Error("an even was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
+				case <-ctx.Done():
+				}
+			}
+		}()
+
 		// Wait for ctrl+c to stop the server.
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, os.Interrupt)
@@ -279,6 +445,8 @@ func etPidGetAllFn(ctx context.Context, p *Process) func() {
 				b, err := cbor.Marshal(pMap)
 				if err != nil {
 					slog.Error("etPidGetAllFn", "failed to marshal pid to proc map", err)
+					// Panic, to easier figure out where eventual errors happened now
+					// during development.
 					panic(err)
 				}
 

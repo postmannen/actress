@@ -38,6 +38,8 @@ import (
 //     example for how it could be implemented.
 type Event struct {
 	Nr int `json:"nr" yaml:"nr" cbor:"nr"`
+	// EventType is the type of the event, Static, Dynamic, and so on
+	EventType EventType `json:"eventType" yaml:"eventType" cbor:"eventType"`
 	// Name is a unique name to identify the type of the event.
 	Name EventName `json:"name" yaml:"name" cbor:"name"`
 	// Cmd is usually used for giving instructions or parameters for
@@ -68,6 +70,16 @@ type Event struct {
 	// Src node.
 	SrcNode Node `json:"srcNode" yaml:"srcNode" cbor:"srcNode"`
 }
+
+type EventType int
+
+const (
+	Static     EventType = 0
+	Dynamic    EventType = 1
+	Custom     EventType = 2
+	Error      EventType = 3
+	Supervisor EventType = 4
+)
 
 type Instruction string
 
