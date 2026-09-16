@@ -448,7 +448,7 @@ func NewProcess(ctx context.Context, parentP *Process, event EventName, fn ETFun
 	ctx, cancel := context.WithCancel(ctx)
 	p := Process{
 		fn:                nil,
-		InCh:              make(chan Event),
+		InCh:              make(chan Event, 10),
 		StaticEventCh:     parentP.StaticEventCh,
 		ErrorEventCh:      parentP.ErrorEventCh,
 		TestCh:            parentP.TestCh,

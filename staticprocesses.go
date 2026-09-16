@@ -89,6 +89,7 @@ func eventRouterFn(processes *processes, eventCh chan Event) ETFunc {
 					case ev := <-p.InCh:
 						slog.Error("an even was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
 					case <-ctx.Done():
+						return
 					}
 				}
 			}()
@@ -266,6 +267,7 @@ func etOsSignalFn(ctx context.Context, p *Process) func() {
 				case ev := <-p.InCh:
 					slog.Error("an even was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
 				case <-ctx.Done():
+					return
 				}
 			}
 		}()
