@@ -83,14 +83,6 @@ const (
 
 type Instruction string
 
-// NewDynProcess will prepare and return a *Process. It will copy
-// channels and map structures from the root process.
-// The purpose of dynamic processes is to have short lived processes
-// that can be quickly started, and removed again when it's job is done.
-// The only difference between a process and a dynamic process are that
-// the dynamic processes have a mutex in processes map DynamicProcesses so
-// we also can delete the processes when they are no longer needed.
-
 type Node string
 
 type EventOpt func(*Event)

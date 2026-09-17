@@ -175,7 +175,6 @@ func eventRouterFn(processes *processes, eventCh chan Event) ETFunc {
 						go func(ev Event) {
 							// Try to 3 times to deliver the message.
 							for i := 0; i < 3; i++ {
-								slog.Error("eventRouterFn", "on", p.Config.NodeName, "found no process registered for the event type", ev.Name, "ev.DstNode", ev.DstNode)
 								time.Sleep(time.Second * 1)
 
 								processes.mu.Lock()
@@ -184,6 +183,7 @@ func eventRouterFn(processes *processes, eventCh chan Event) ETFunc {
 
 								if !ok {
 									// process not found yet, loop again
+									slog.Error("eventRouterFn", "on", p.Config.NodeName, "found no process registered for the event type", ev.Name, "ev.DstNode", ev.DstNode)
 									continue
 								}
 
@@ -227,9 +227,9 @@ func CopyEventFields(ev *Event) *Event {
 	}
 
 	e := Event{
-		Nr:   ev.Nr,
-		Name: ev.Name,
-
+		Nr:          ev.Nr,
+		EventType:   ev.EventType,
+		Name:        ev.Name,
 		Cmd:         ev.Cmd,
 		Instruction: ev.Instruction,
 		Err:         ev.Err,
@@ -265,7 +265,7 @@ func etOsSignalFn(ctx context.Context, p *Process) func() {
 			for {
 				select {
 				case ev := <-p.InCh:
-					slog.Error("an even was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
+					slog.Error("an event was received on this actors inch, which is not in use, dropping event", "at actor", p.Event, "from src node", ev.SrcNode, "event nr", ev.Nr)
 				case <-ctx.Done():
 					return
 				}

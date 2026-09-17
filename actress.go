@@ -330,6 +330,10 @@ func NewRootProcess(ctx context.Context, fn ETFunc, conf *Config) *Process {
 		Cancel:              cancel,
 	}
 
+	if p.Config.NodeName == "" || p.Config.NodeName == "replaceme" {
+		slog.Error("NewRootProcess", "Config.NodeName should be set", p.Config.NodeName)
+	}
+
 	p.PID = p.pids.nr
 
 	if fn != nil {
@@ -478,9 +482,7 @@ func NewProcess(ctx context.Context, parentP *Process, event EventName, fn ETFun
 }
 
 // AddEvent will deliver the event to the correct router based
-// on the specified Kind of the Event.
-// If the Kind are missing the event will be handled as a static
-// event.
+// on the specified type of the Event.
 // If the event is to be delivered to a remote node, AddEvent will also
 // take care of that and ship the event off to the ETRemote process.
 func (p *Process) AddEvent(event Event) {
@@ -516,12 +518,12 @@ func (p *Process) AddEvent(event Event) {
 		return
 	}
 	// -------------------------------------------------------------
-	s := string(event.Name) // EventName is a string alias; this is a no-op if already string
+	s := string(event.Name)
 	if len(s) < 2 {
 		slog.Error("AddEvent", "unknown event.Name, to short, should be at least length of 2", event.Name)
 		return
 	}
-	if s[0] != 'E' { // all your kinds start with 'E'
+	if s[0] != 'E' {
 		slog.Error("AddEvent", "unknown event.Name, should start with E", event.Name)
 		return
 	}

@@ -8,28 +8,27 @@ A Concurrent Actor framework written in Go.
 
 ## Actress Overview
 
-Actor systems model a program as a collection of independent processes (actors), each with its own private state that no other actor can touch. Actors don't share memory; they communicate exclusively by sending messages to one another, which they handle asynchronously, one at a time. Because each actor owns its state and processes messages sequentially, there are no mutexes, no data races, and no lock-ordering bugs to reason about. This makes actor systems a natural fit for concurrent workloads on a single machine and for distributed systems.
+Actor systems model a program as a collection of independent processes (actors), each with its own private state that no other actor can touch. In general, Actors don't share memory, they communicate exclusively by sending messages to one another, which they handle asynchronously, one at a time. Because each actor owns its state and processes messages sequentially, there are no need for mutexes, there will be no data races, and no lock-ordering bugs to reason about. This makes actor systems a natural fit for concurrent workloads on a single machine and for distributed systems.
  
 ### So how is this done ?
 
-- Define custom **Processes** (actors) that do some logic. A Process can be thought of as a normal function that listens for events, which does it's logic when an event is received.
+- Define custom **Processes** (actors) that do some task. A Process can be thought of as a normal function that listens for events, which does it's task when an event is received.
 - Multiple Processes can be chained together to form a complete flow of work.
 - Processes communicate by sending **Events** (messages) to one another.
 - Multiple processes can run on the same instance, called a **Node**.
 - Multiple Nodes can run on the same machine.
-- Nodes can also be spread over a network of multiple machines; Actress provides functionality for automatically forwarding events between Nodes.
+- Nodes can also be spread over a network of multiple machines, and Actress provides functionality for automatically forwarding events between Nodes.
 
 ### Processes
 
-A process are like a module capable of performing a specific task. A process is defined by an Event Name and an Event Function attached to each process. A process have an InCh for receiving events, and an AddEvent function for sending Events.
+A process are like a module that can perform a specific task. A process is defined by an Event Name and an Event Function attached to each process. A process have an InCh for receiving events, and an AddEvent function for sending Events to other processes.
 The processes can themselves spawn new processes.
-To communicate with other processes, a process can send Event messages to other processes.
 
 ### Sharing state
 
-Normally you might want to avoid sharing state, and state are shared by passing the state from one processes to the next as an event message.
+Normally you want to avoid sharing state, and state are shared by passing the state from one processes to the next as an event message.
 
-But, if needed, a process running in the same Node instance can share state directly between the Process Functions if needed. This can be done by giving it a state variable or struct type that holds the state as an input argument to the event function.
+But, if sharing state is needed, a process running in the same Node instance can share state directly between the Process Functions if needed. This can be done by giving it a state variable or struct type that holds the state as an input argument to the event function.
 
 Example:
 
@@ -48,14 +47,16 @@ func etGreet(c *Client) actress.ETFunc {
 
 ### Events
 
-To communicate with other processes, we send events. Each process has its own unique event name. Events are the way to communicate between the processes. They can carry data, either with the result of something a process did that is passed on to the next process for further processing.
-An event can also contain a chain of several events to create workflows of what do do and in what order by using the **NextEvent** feature (see examples for usage).
+To communicate with other processes, we send events. Each process has its own unique event name. Events are the way to communicate between the processes. They can carry data with the result of something a process did that is passed on to the next process for further processing. Think of it as the same concept as piping output in linux, where you can pipe the output of one command as the input of the next command.
+An event can also contain a chain of several events to create workflows or pipes of what do do and in what order by using the **NextEvent** feature (see examples for usage).
 
 The structure of an Event:
 
 ```Go
 type Event struct {
     Nr int
+    // EventType is the type of the event, Static, Dynamic, and so on
+    EventType EventType `json:"eventType" yaml:"eventType" cbor:"eventType"`
     // Name is a unique name to identify the type of the event.
     Name EventName `json:"name" yaml:"name" cbor:"name"`
     // Cmd is usually used for giving instructions or parameters for
@@ -90,7 +91,7 @@ type Event struct {
 
 ### Event Functions (ETFunc)
 
-Event Functions holds the logic for what a process shall do when an event is received, and then what to do with the data the event carries. The Event functions are callback functions that are defined for a process when the process is created.
+Event Functions holds the logic for what a process shall do when an event is received, and then what to do with the data the event carries. The Event functions are functions that are attached to a process when the process is created.
 
 The programmer can decide if the Process Function should depend on the input from the **in channel** of the process, or just continously do some work on it's own. For an event function to be triggered to work on events it should hold a **for** loop that listens on the Process's `InCh` for new Events.
 
@@ -206,7 +207,7 @@ func main() {
 
 ## Remote delivery
 
-If the DstNode field of an event is set, the event can be sent to the remote node set using the ETRemote process that process has been started, with a etRemoteFunc for how to do remote delivery. If no value is set in the DstNode field, the event will be processed locally.
+If the DstNode field of an event is set, the event can be sent to the remote node set using the ETRemote process, if that process has been started with an etRemoteFunc, where etRemoteFunc defines how to do remote delivery. If no value is set in the DstNode field, the event will be processed locally.
 
 How this works is that when the routing logic notices that the DstNode field is set, it will create a new event of type ETRemote, put the original event in the NextEvent field of the new ETRemote event, and then the event is added to the queue with the AddEvent method of the Actress. Tip, check the [NextEvent](#nextevent) section for more information about the NextEvent field.
 
@@ -300,7 +301,7 @@ The reason for splitting them up are for **separation**. For example if the even
 
 A router Actress/Process is defined for each of the event types.
 
-### Where to use an actor process of a specific kind ?
+### Where and how to use an actor process of a specific type ?
 
 **Static processes**, normally used for processes/actors defined at startup.
 **Dynamic processes**, Can be used both for startup and runtime defined actors, but prefer static at startup unless you have a really good reason to not do it :).
@@ -309,7 +310,7 @@ A router Actress/Process is defined for each of the event types.
 
 ## NextEvent
 
-NextEvent makes it possible to define an event as a chain of Events. An example could be that we want to get the content of a web page, and print the result to the screen. We could do that in the following way.
+NextEvent makes it possible to define an event as a chain of Events, similar to piping command output in linux. An example could be that we want to get the content of a web page, and print the result to the screen. We could do that in the following way.
 
 ```go
 p.AddEvent(Event{Name: Name("ETBleeping"), NextEvent: &Event{Name: ETPrint}})
@@ -319,4 +320,4 @@ p.AddEvent(Event{Name: Name("ETBleeping"), NextEvent: &Event{Name: ETPrint}})
 
 The purpose of dynamic processes is to have short lived processes that can be quickly started, and removed again when it's job is done. Dynamic processes are not manually given a name, but automatically assigned an UUID to identify it.
 
-A typical example could be that there is a processes that needs to communicate in some other way with another process that can't be done with the current process's event channel. We can then spawn a dynamic process to take care of that. Check out the test and files in the examples directory. A process can spawn as many dynamic processes as it needs.
+A typical example could be that there is a processes that needs to communicate in some other way with another process that can't be done with the current process's event channel. We can then spawn a dynamic process to take care of that. Check out the test files in the examples directory. A process can spawn as many dynamic processes as it needs.
