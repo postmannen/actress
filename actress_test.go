@@ -35,9 +35,9 @@ func TestEventProcs(t *testing.T) {
 
 	tFunc := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case result := <-p.InCh:
 					testCh <- string(result.Data)
@@ -76,9 +76,9 @@ func TestDynamicProcess(t *testing.T) {
 
 	tFunc := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case result := <-p.InCh:
 					testCh <- string(result.Data)
@@ -123,9 +123,9 @@ func TestDynamicProcess2(t *testing.T) {
 	// send Event to.
 	tFunc := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case ev := <-p.InCh:
 					dyn1EVType := ev.Cmd[1]
@@ -230,9 +230,9 @@ func TestDynamicProcessReaderWriter(t *testing.T) {
 	// send Event to.
 	edTestFn := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case ev := <-p.InCh:
 					dyn1EVType := ev.Cmd[1]
@@ -330,9 +330,9 @@ func TestNextEventProcs(t *testing.T) {
 
 	testFunc := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case result := <-p.InCh:
 					testCh <- string(result.Data)
@@ -351,9 +351,9 @@ func TestNextEventProcs(t *testing.T) {
 
 	nextEventFunc := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case ev := <-p.InCh:
 					// Pass the data from the current event into the next event.
@@ -443,6 +443,140 @@ func TestPidToProcMap(t *testing.T) {
 	//t.Fatalf("got event: %v, Data: %v\n", ev.Name, string(ev.Data))
 }
 
+func TestETRemoteTwoProcesses(t *testing.T) {
+	//log.SetOutput(io.Discard)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// --- ETRemote function to be used by both nodes
+	remoteCh := make(chan Event)
+
+	const ETChannelWrite EventName = "ETChannelWrite"
+
+	etChannelWrite := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			for {
+				select {
+				case ev := <-p.InCh:
+					// The event came here via the ETRemote Actor. The event we
+					// got here is an ETChannelWrite event, but the ETRemote
+					// actor put the actual event to forward as the NextEvent of the
+					// ETChannelWrite, so we just put the NextEvent on the channel.
+					nextEV := ev.NextEvent
+					remoteCh <- *nextEV
+
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	const ETChannelRead EventName = "ETChannelRead"
+
+	etChannelRead := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			for {
+				select {
+				case ev := <-remoteCh:
+					// Take the event we received at the remote destination side, and just add
+					// the event to be processed locally.
+					p.AddEvent(ev)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	etRemoteFn := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			p.SignalReady()
+
+			for {
+				select {
+				case ev := <-p.InCh:
+					nextEv := ev.NextEvent
+					// The src node is set in the event, so the remote will know
+					// where it came from if it at some point would like to
+					// repply on this. This is not used for this test, just explaining
+					// here for how to use ETRemote.
+					nextEv.SrcNode = p.Config.NodeName
+
+					evToSend := Event{Name: ETChannelWrite, NextEvent: nextEv}
+					p.AddEvent(evToSend)
+
+				case <-ctx.Done():
+				}
+			}
+		}
+
+		return fn
+	}
+	// ---
+
+	testCh := make(chan string)
+
+	cfg1, _ := NewConfig("debug")
+	cfg1.NodeName = "rootp1"
+	rootp1 := NewRootProcess(ctx, nil, cfg1)
+
+	rootp1.Act()
+	NewProcess(ctx, rootp1, ETChannelWrite, etChannelWrite).Act()
+	NewProcess(ctx, rootp1, ETRemote, etRemoteFn).Act()
+
+	// --- root 2
+
+	const ETTest2 EventName = "ETTest2"
+
+	tFunc2 := func(ctx context.Context, p *Process) func() {
+		fn := func() {
+			p.SignalReady()
+			for {
+
+				select {
+				case result := <-p.InCh:
+					testCh <- string(result.Data)
+
+				case <-p.Ctx.Done():
+					return
+				}
+			}
+		}
+
+		return fn
+	}
+
+	cfg2, _ := NewConfig("debug")
+	cfg2.NodeName = "rootp2"
+	rootp2 := NewRootProcess(ctx, nil, cfg2)
+	err := rootp2.Act()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	NewProcess(ctx, rootp2, ETRemote, etRemoteFn).Act()
+	NewProcess(ctx, rootp2, ETChannelRead, etChannelRead).Act()
+	NewProcess(ctx, rootp2, ETTest2, tFunc2).Act()
+
+	// --- Run the test
+
+	rootp1.AddEvent(Event{Name: ETTest2, DstNode: "rootp2", Data: fmt.Appendf([]byte{}, "%v", "hello")})
+
+	result := <-testCh
+
+	if result != "hello" {
+		t.Fatalf("the result did not match \"hell\", got: %v\n", result)
+	}
+
+	t.Log("result matched: hello")
+
+}
+
 // -------------------------------------------------------------
 // Benchmarks
 // -------------------------------------------------------------
@@ -458,8 +592,8 @@ func BenchmarkSingleProcess(b *testing.B) {
 
 	tFunc := func(ctx context.Context, p *Process) func() {
 		fn := func() {
+			p.SignalReady()
 			for {
-				p.SignalReady()
 
 				select {
 				case result := <-p.InCh:
@@ -500,8 +634,9 @@ func BenchmarkSingleProcessEventAndError(b *testing.B) {
 
 	tFunc := func(ctx context.Context, p *Process) func() {
 		fn := func() {
+			p.SignalReady()
+
 			for {
-				p.SignalReady()
 
 				select {
 				case result := <-p.InCh:
@@ -552,9 +687,9 @@ func BenchmarkTwoProcesses(b *testing.B) {
 
 	tFunc1 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case result := <-p.InCh:
 					p.StaticEventCh <- Event{Name: ETTest2, Data: result.Data}
@@ -572,9 +707,9 @@ func BenchmarkTwoProcesses(b *testing.B) {
 
 	tFunc2 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case result := <-p.InCh:
 					testCh <- string(result.Data)
@@ -621,9 +756,9 @@ func BenchmarkThreeProcesses(b *testing.B) {
 
 	tFunc1 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case result := <-p.InCh:
 					p.StaticEventCh <- Event{Name: ETTest2, Data: result.Data}
@@ -640,9 +775,9 @@ func BenchmarkThreeProcesses(b *testing.B) {
 
 	tFunc2 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case result := <-p.InCh:
 					p.StaticEventCh <- Event{Name: ETTest3, Data: result.Data}
@@ -659,9 +794,9 @@ func BenchmarkThreeProcesses(b *testing.B) {
 
 	tFunc3 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case result := <-p.InCh:
 					testCh <- string(result.Data)
@@ -755,9 +890,9 @@ func BenchmarkTwoDynamicProcesses(b *testing.B) {
 
 	tFunc1 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case result := <-p.InCh:
 					p.AddEvent(Event{Name: EDTest2, Data: result.Data})
@@ -775,9 +910,9 @@ func BenchmarkTwoDynamicProcesses(b *testing.B) {
 
 	tFunc2 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case result := <-p.InCh:
 					testCh <- string(result.Data)
@@ -819,9 +954,9 @@ func BenchmarkSingleDynamicProcess(b *testing.B) {
 
 	tFunc := func(ctx context.Context, p *Process) func() {
 		fn := func() {
-			for {
-				p.SignalReady()
+			p.SignalReady()
 
+			for {
 				select {
 				case result := <-p.InCh:
 					testCh <- string(result.Data)
