@@ -284,6 +284,8 @@ etMQTTReceiverFunc := func(ctx context.Context, p *actress.Process) func() {
 actress.NewProcess(ctx, rootAct, ETMQTTReceiver, etMQTTReceiverFunc).Act()
 ```
 
+An example using two root processes and ETRemote via a channel for communication between them can be found in the test files as **TestETRemoteTwoProcesses**.
+
 ## Details
 
 Short intro about the Events.
