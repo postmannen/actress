@@ -518,6 +518,11 @@ func (p *Process) AddEvent(event Event) {
 		return
 	}
 	// -------------------------------------------------------------
+
+	// We now the event is to be delivered locally, so we set the local event name
+	// incase it was not set, for clearity in logs
+	event.SrcNode = p.Config.NodeName
+
 	s := string(event.Name)
 	if len(s) < 2 {
 		slog.Error("AddEvent", "unknown event.Name, to short, should be at least length of 2", event.Name)
@@ -685,13 +690,13 @@ func (p *Process) WaitForReady() {
 		// If the channel is closed by the user inside the p.fn function, the process function is started.
 		case <-p.readyCh:
 			if slog.Default().Enabled(p.Ctx, slog.LevelDebug) {
-				slog.Debug("WaitForReady", "is ready", p.Event)
+				slog.Debug("WaitForReady", "is ready", p.Event, "on node", p.Config.NodeName)
 			}
 		// If the timeout is reached, there the user have most likely forgotten to call the SignalReady function,
 		// so we wait for the defined amout of time, and assume that the process is ready.
 		case <-time.After(time.Millisecond * 5):
 			if slog.Default().Enabled(p.Ctx, slog.LevelDebug) {
-				slog.Debug("WaitForReady", "should be ready, signal ready based on TIMEOUT", p.Event)
+				slog.Debug("WaitForReady", "should be ready, signal ready based on TIMEOUT", p.Event, "on node", p.Config.NodeName)
 			}
 		}
 	}
