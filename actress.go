@@ -504,6 +504,7 @@ func (p *Process) AddEvent(event Event) {
 		// parameter does not escape to the heap on AddEvent call.
 		e := new(Event)
 		*e = event
+		//e.SrcNode = p.Config.NodeName
 
 		remoteEv := Event{
 			Name:      ETRemote,
@@ -518,10 +519,6 @@ func (p *Process) AddEvent(event Event) {
 		return
 	}
 	// -------------------------------------------------------------
-
-	// We now the event is to be delivered locally, so we set the local event name
-	// incase it was not set, for clearity in logs
-	event.SrcNode = p.Config.NodeName
 
 	s := string(event.Name)
 	if len(s) < 2 {
