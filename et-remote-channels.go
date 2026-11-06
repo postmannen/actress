@@ -66,7 +66,9 @@ func ETRemoteChannelReadWriteFn() ETFunc {
 					// where it came from if it at some point would like to
 					// repply on this. This is not used for this test, just explaining
 					// here for how to use ETRemote.
-					nextEv.SrcNode = p.Config.NodeName
+					if nextEv.SrcNode == "" {
+						nextEv.SrcNode = p.Config.NodeName
+					}
 
 					evToSend := Event{Name: ETChannelWrite, NextEvent: nextEv}
 					p.AddEvent(evToSend)
