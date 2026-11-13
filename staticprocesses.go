@@ -77,7 +77,7 @@ func eventRouterFn(processes *processes, eventCh chan Event) ETFunc {
 	fn2 := func(ctx context.Context, p *Process) func() {
 		fn := func() {
 			defer func() {
-				slog.Info("etRouter", "stopped etRouter", "")
+				slog.Info("stopped", "on node", p.Config.NodeName, "router", p.Event)
 				p.Stop()
 			}()
 
